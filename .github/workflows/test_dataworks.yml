@@ -1,0 +1,404 @@
+name: "[TEST] DataWorks Integration - Step by Step"
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: '执行步骤 (all / step1_cli / step2_resource_groups / step3_check_datasources / step4_create_oss_ds / step5_create_odps_ds / step6_create_job / step7_submit / step8_deploy)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - step1_cli
+          - step2_resource_groups
+          - step3_check_datasources
+          - step4_create_oss_ds
+          - step5_create_odps_ds
+          - step6_create_job
+          - step7_submit
+          - step8_deploy
+      file_id:
+        description: '(step7/step8) 从 step6 获取的 FileId'
+        required: false
+        default: ''
+
+env:
+  DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
+
+jobs:
+  test:
+    name: "Test DataWorks API - ${{ github.event.inputs.step }}"
+    runs-on: ubuntu-latest
+
+    steps:
+      # ============================================================
+      # 基础设置（所有步骤都需要）
+      # ============================================================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Setup Aliyun CLI
+        uses: aliyun/setup-aliyun-cli-action@v1
+
+      - name: Configure Aliyun CLI
+        run: |
+          aliyun configure set \
+            --profile default \
+            --mode AK \
+            --access-key-id ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
+            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
+            --region ${{ secrets.ALIYUN_REGION }}
+
+      # ============================================================
+      # Step 1: 测试 CLI 连接
+      # ============================================================
+      - name: "Step 1: Test Aliyun CLI Connection"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step1_cli' }}
+        run: |
+          echo "=========================================="
+          echo "Testing Aliyun CLI connection..."
+          echo "=========================================="
+          aliyun sts GetCallerIdentity
+          echo ""
+          echo "✅ CLI connection successful!"
+
+      # ============================================================
+      # Step 2: 查询数据集成资源组
+      # ============================================================
+      - name: "Step 2: List Resource Groups (Data Integration)"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step2_resource_groups' }}
+        run: |
+          echo "=========================================="
+          echo "Listing Data Integration Resource Groups..."
+          echo "=========================================="
+          RESULT=$(aliyun dataworks-public ListResourceGroups \
+            --ResourceGroupType 4)
+          echo "$RESULT" | jq '.'
+          echo ""
+          echo "-------- Resource Group Identifiers --------"
+          echo "$RESULT" | jq -r '.Data[]? | "  Identifier: \(.Identifier)  |  Name: \(.ResourceGroupType)  |  Status: \(.Status)"'
+          echo ""
+          echo "📝 请将上面的 Identifier 填入 projects/Test/config.json 的 ResourceGroupIdentifier 字段"
+
+      # ============================================================
+      # Step 3: 检查数据源是否存在
+      # ============================================================
+      - name: "Step 3: Check Existing DataSources"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step3_check_datasources' }}
+        run: |
+          echo "=========================================="
+          echo "Checking existing DataSources..."
+          echo "=========================================="
+          
+          CONFIG="projects/Test/config.json"
+          OSS_DS=$(jq -r '.OSS.DataSourceName' "$CONFIG")
+          ODPS_DS=$(jq -r '.MaxCompute.DataSourceName' "$CONFIG")
+          
+          echo "--- Checking OSS DataSource: $OSS_DS ---"
+          aliyun dataworks-public ListDataSources \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --Name "$OSS_DS" \
+            --PageSize 20 \
+            --PageNumber 1 | jq '.'
+          
+          echo ""
+          echo "--- Checking MaxCompute DataSource: $ODPS_DS ---"
+          aliyun dataworks-public ListDataSources \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --Name "$ODPS_DS" \
+            --PageSize 20 \
+            --PageNumber 1 | jq '.'
+
+      # ============================================================
+      # Step 4: 创建 OSS 数据源
+      # ============================================================
+      - name: "Step 4: Create OSS DataSource"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step4_create_oss_ds' }}
+        run: |
+          echo "=========================================="
+          echo "Creating OSS DataSource..."
+          echo "=========================================="
+          
+          CONFIG="projects/Test/config.json"
+          DS_NAME=$(jq -r '.OSS.DataSourceName' "$CONFIG")
+          ENDPOINT=$(jq -r '.OSS.Endpoint' "$CONFIG")
+          BUCKET=$(jq -r '.OSS.Bucket' "$CONFIG")
+          
+          echo "DataSource Name: $DS_NAME"
+          echo "Endpoint: $ENDPOINT"
+          echo "Bucket: $BUCKET"
+          echo ""
+          
+          CONN_PROPS=$(jq -n \
+            --arg endpoint "$ENDPOINT" \
+            --arg bucket "$BUCKET" \
+            '{
+              "envType": "Prod",
+              "endpoint": $endpoint,
+              "bucket": $bucket
+            }')
+          
+          echo "Connection Properties:"
+          echo "$CONN_PROPS" | jq '.'
+          echo ""
+          
+          RESULT=$(aliyun dataworks-public CreateDataSource \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --Name "$DS_NAME" \
+            --DataSourceType "oss" \
+            --ConnectionProperties "$CONN_PROPS" \
+            2>&1) || true
+          
+          echo "Result:"
+          echo "$RESULT" | jq '.' 2>/dev/null || echo "$RESULT"
+
+      # ============================================================
+      # Step 5: 创建 MaxCompute 数据源
+      # ============================================================
+      - name: "Step 5: Create MaxCompute DataSource"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step5_create_odps_ds' }}
+        run: |
+          echo "=========================================="
+          echo "Creating MaxCompute DataSource..."
+          echo "=========================================="
+          
+          CONFIG="projects/Test/config.json"
+          DS_NAME=$(jq -r '.MaxCompute.DataSourceName' "$CONFIG")
+          MC_PROJECT=$(jq -r '.MaxCompute.ProjectName' "$CONFIG")
+          MC_ENDPOINT=$(jq -r '.MaxCompute.Endpoint' "$CONFIG")
+          
+          echo "DataSource Name: $DS_NAME"
+          echo "MC Project: $MC_PROJECT"
+          echo "MC Endpoint: $MC_ENDPOINT"
+          echo ""
+          
+          CONN_PROPS=$(jq -n \
+            --arg project "$MC_PROJECT" \
+            --arg endpoint "$MC_ENDPOINT" \
+            '{
+              "envType": "Prod",
+              "projectName": $project,
+              "endpoint": $endpoint
+            }')
+          
+          echo "Connection Properties:"
+          echo "$CONN_PROPS" | jq '.'
+          echo ""
+          
+          RESULT=$(aliyun dataworks-public CreateDataSource \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --Name "$DS_NAME" \
+            --DataSourceType "odps" \
+            --ConnectionProperties "$CONN_PROPS" \
+            2>&1) || true
+          
+          echo "Result:"
+          echo "$RESULT" | jq '.' 2>/dev/null || echo "$RESULT"
+
+      # ============================================================
+      # Step 6: 创建数据集成同步任务
+      # ============================================================
+      - name: "Step 6: Create DI Sync Task"
+        id: create_task
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step6_create_job' }}
+        run: |
+          echo "=========================================="
+          echo "Creating DI Sync Task..."
+          echo "=========================================="
+          
+          CONFIG="projects/Test/config.json"
+          PROJECT_NAME=$(jq -r '.ProjectName' "$CONFIG")
+          TABLE_NAME=$(jq -r '.Tables[0].Name' "$CONFIG")
+          JOB_NAME="${PROJECT_NAME}_${TABLE_NAME}"
+          
+          echo "JobName: $JOB_NAME"
+          echo ""
+          
+          # ---- 生成 TaskContent ----
+          OSS_DS=$(jq -r '.OSS.DataSourceName' "$CONFIG")
+          OSS_BASE=$(jq -r '.OSS.BasePath' "$CONFIG")
+          OSS_OBJ=$(jq -r '.Tables[0].OSS_Object' "$CONFIG")
+          FULL_OSS_OBJ="${OSS_BASE}${OSS_OBJ}"
+          
+          ODPS_DS=$(jq -r '.MaxCompute.DataSourceName' "$CONFIG")
+          FILE_FORMAT=$(jq -r '.Tables[0].FileFormat' "$CONFIG")
+          DELIMITER=$(jq -r '.Tables[0].FieldDelimiter' "$CONFIG")
+          ENCODING=$(jq -r '.Tables[0].Encoding' "$CONFIG")
+          
+          READER_COLS=$(jq -c '[.Tables[0].Columns | to_entries[] | {type: .value.type, value: (.key | tostring)}]' "$CONFIG")
+          WRITER_COLS=$(jq -c '[.Tables[0].Columns[].name]' "$CONFIG")
+          
+          TASK_CONTENT=$(jq -n \
+            --arg oss_ds "$OSS_DS" \
+            --arg oss_obj "$FULL_OSS_OBJ" \
+            --argjson reader_cols "$READER_COLS" \
+            --arg delimiter "$DELIMITER" \
+            --arg enc "$ENCODING" \
+            --arg fmt "$FILE_FORMAT" \
+            --arg odps_ds "$ODPS_DS" \
+            --arg table "$TABLE_NAME" \
+            --argjson writer_cols "$WRITER_COLS" \
+            '{
+              "type": "job",
+              "version": "2.0",
+              "steps": [
+                {
+                  "stepType": "oss",
+                  "parameter": {
+                    "datasource": $oss_ds,
+                    "object": [$oss_obj],
+                    "column": $reader_cols,
+                    "fieldDelimiter": $delimiter,
+                    "encoding": $enc,
+                    "fileFormat": $fmt
+                  },
+                  "name": "Reader",
+                  "category": "reader"
+                },
+                {
+                  "stepType": "odps",
+                  "parameter": {
+                    "datasource": $odps_ds,
+                    "table": $table,
+                    "column": $writer_cols,
+                    "truncate": true
+                  },
+                  "name": "Writer",
+                  "category": "writer"
+                }
+              ],
+              "setting": {
+                "speed": { "channel": 1, "throttle": false },
+                "errorLimit": { "record": 0 }
+              },
+              "order": {
+                "hops": [{ "from": "Reader", "to": "Writer" }]
+              }
+            }')
+          
+          echo "TaskContent:"
+          echo "$TASK_CONTENT" | jq '.'
+          echo ""
+          
+          # ---- 生成 TaskParam ----
+          RES_GROUP=$(jq -r '.ResourceGroupIdentifier' "$CONFIG")
+          TASK_PARAM=$(jq -n --arg rg "$RES_GROUP" '{"FileFolderPath":"/","ResourceGroup":$rg}')
+          
+          echo "TaskParam:"
+          echo "$TASK_PARAM" | jq '.'
+          echo ""
+          
+          # ---- 调用 API ----
+          RESULT=$(aliyun dataworks-public CreateDISyncTask \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --TaskType "DI_OFFLINE" \
+            --TaskName "$JOB_NAME" \
+            --TaskParam "$TASK_PARAM" \
+            --TaskContent "$TASK_CONTENT" \
+            2>&1) || true
+          
+          echo "Result:"
+          echo "$RESULT" | jq '.' 2>/dev/null || echo "$RESULT"
+          
+          # ---- 提取 FileId ----
+          FILE_ID=$(echo "$RESULT" | jq -r '.Data.FileId // empty' 2>/dev/null || echo "")
+          if [ -n "$FILE_ID" ]; then
+            echo ""
+            echo "✅ Task created! FileId = $FILE_ID"
+            echo "📝 Use this FileId for step7 and step8"
+            echo "file_id=$FILE_ID" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "❌ Failed to create task. Check the error above."
+          fi
+
+      # ============================================================
+      # Step 7: 提交任务
+      # ============================================================
+      - name: "Step 7: Submit File"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step7_submit' }}
+        run: |
+          echo "=========================================="
+          echo "Submitting File..."
+          echo "=========================================="
+          
+          # FileId 来源：step6 自动传递，或手动输入
+          FILE_ID="${{ steps.create_task.outputs.file_id }}"
+          if [ -z "$FILE_ID" ]; then
+            FILE_ID="${{ github.event.inputs.file_id }}"
+          fi
+          
+          if [ -z "$FILE_ID" ]; then
+            echo "❌ No FileId provided. Run step6 first or provide file_id input."
+            exit 1
+          fi
+          
+          echo "FileId: $FILE_ID"
+          echo ""
+          
+          RESULT=$(aliyun dataworks-public SubmitFile \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --FileId "$FILE_ID" \
+            2>&1) || true
+          
+          echo "Result:"
+          echo "$RESULT" | jq '.' 2>/dev/null || echo "$RESULT"
+
+      # ============================================================
+      # Step 8: 发布到生产
+      # ============================================================
+      - name: "Step 8: Deploy File"
+        if: ${{ github.event.inputs.step == 'all' || github.event.inputs.step == 'step8_deploy' }}
+        run: |
+          echo "=========================================="
+          echo "Deploying File to Production..."
+          echo "=========================================="
+          
+          FILE_ID="${{ steps.create_task.outputs.file_id }}"
+          if [ -z "$FILE_ID" ]; then
+            FILE_ID="${{ github.event.inputs.file_id }}"
+          fi
+          
+          if [ -z "$FILE_ID" ]; then
+            echo "❌ No FileId provided. Run step6 first or provide file_id input."
+            exit 1
+          fi
+          
+          echo "FileId: $FILE_ID"
+          echo ""
+          
+          RESULT=$(aliyun dataworks-public DeployFile \
+            --ProjectId ${{ env.DATAWORKS_PROJECT_ID }} \
+            --FileId "$FILE_ID" \
+            2>&1) || true
+          
+          echo "Result:"
+          echo "$RESULT" | jq '.' 2>/dev/null || echo "$RESULT"
+
+      # ============================================================
+      # 汇总
+      # ============================================================
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════════╗"
+          echo "║              Test Run Complete                           ║"
+          echo "╠═══════════════════════════════════════════════════════════╣"
+          echo "║  Step executed: ${{ github.event.inputs.step }}"
+          echo "║  Project ID:   ${{ env.DATAWORKS_PROJECT_ID }}"
+          echo "╚═══════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "📋 测试流程:"
+          echo "  step1_cli              → 验证 CLI 连接"
+          echo "  step2_resource_groups  → 获取资源组 Identifier"
+          echo "  step3_check_datasources→ 检查数据源是否存在"
+          echo "  step4_create_oss_ds    → 创建 OSS 数据源"
+          echo "  step5_create_odps_ds   → 创建 MaxCompute 数据源"
+          echo "  step6_create_job       → 创建同步 Job"
+          echo "  step7_submit           → 提交任务"
+          echo "  step8_deploy           → 发布到生产"

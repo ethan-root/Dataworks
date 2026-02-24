@@ -1,0 +1,56 @@
+name: DataWorks Sync Management
+
+on:
+  # 手动触发 —— 可指定品牌项目
+  workflow_dispatch:
+    inputs:
+      projects:
+        description: '指定品牌项目名称（逗号分隔，留空则处理所有）例: Gucci,Balenciaga'
+        required: false
+        default: ''
+  # config.json 变更时自动触发
+  push:
+    branches: [main]
+    paths:
+      - 'projects/**/config.json'
+
+env:
+  DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
+
+jobs:
+  deploy-sync-tasks:
+    name: Deploy DataWorks Sync Tasks
+    runs-on: ubuntu-latest
+
+    steps:
+      # ① 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ② 安装 jq（用于JSON处理）
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      # ③ 安装 Aliyun CLI
+      - name: Setup Aliyun CLI
+        uses: aliyun/setup-aliyun-cli-action@v1
+
+      # ④ 配置 Aliyun CLI 凭证
+      - name: Configure Aliyun CLI
+        run: |
+          aliyun configure set \
+            --profile default \
+            --mode AK \
+            --access-key-id ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
+            --access-key-secret ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} \
+            --region ${{ secrets.ALIYUN_REGION }}
+
+      # ⑤ 设置脚本执行权限
+      - name: Set script permissions
+        run: chmod +x scripts/*.sh
+
+      # ⑥ 执行部署
+      - name: Deploy DataWorks Sync Tasks
+        run: bash scripts/deploy.sh "${{ github.event.inputs.projects }}"
+        env:
+          DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}

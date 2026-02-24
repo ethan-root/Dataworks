@@ -1,0 +1,42 @@
+{
+    "ProjectName": "Test",
+    "OSS": {
+        "DataSourceName": "oss_test",
+        "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
+        "Bucket": "your-test-bucket",
+        "BasePath": "test/data/"
+    },
+    "MaxCompute": {
+        "DataSourceName": "odps_test",
+        "ProjectName": "your_mc_project",
+        "Endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
+    },
+    "Tables": [
+        {
+            "Name": "HelloWorld",
+            "OSS_Object": "hello/",
+            "FileFormat": "csv",
+            "FieldDelimiter": ",",
+            "Encoding": "UTF-8",
+            "Columns": [
+                {
+                    "name": "id",
+                    "type": "string"
+                },
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "value",
+                    "type": "string"
+                }
+            ]
+        }
+    ],
+    "ResourceGroupIdentifier": "your_resource_group_identifier",
+    "Schedule": {
+        "CronExpress": "00 00 02 * * ?",
+        "CycleType": "DAY"
+    }
+}

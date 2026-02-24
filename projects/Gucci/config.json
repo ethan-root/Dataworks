@@ -1,0 +1,47 @@
+{
+  "ProjectName": "Gucci",
+  "OSS": {
+    "DataSourceName": "oss_gucci",
+    "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
+    "Bucket": "kering-gucci-data",
+    "BasePath": "data/export/"
+  },
+  "MaxCompute": {
+    "DataSourceName": "odps_gucci",
+    "ProjectName": "gucci_mc_project",
+    "Endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
+  },
+  "Tables": [
+    {
+      "Name": "Item",
+      "OSS_Object": "item/",
+      "FileFormat": "csv",
+      "FieldDelimiter": ",",
+      "Encoding": "UTF-8",
+      "Columns": [
+        {"name": "item_id", "type": "string"},
+        {"name": "item_name", "type": "string"},
+        {"name": "price", "type": "double"},
+        {"name": "category", "type": "string"}
+      ]
+    },
+    {
+      "Name": "User",
+      "OSS_Object": "user/",
+      "FileFormat": "csv",
+      "FieldDelimiter": ",",
+      "Encoding": "UTF-8",
+      "Columns": [
+        {"name": "user_id", "type": "string"},
+        {"name": "user_name", "type": "string"},
+        {"name": "email", "type": "string"},
+        {"name": "phone", "type": "string"}
+      ]
+    }
+  ],
+  "ResourceGroupIdentifier": "S_res_group_xxx",
+  "Schedule": {
+    "CronExpress": "00 00 02 * * ?",
+    "CycleType": "DAY"
+  }
+}
