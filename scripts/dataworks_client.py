@@ -260,9 +260,9 @@ class DataWorksClient:
         spec_json = self.build_node_spec(config, table_idx, node_name)
 
         request = dw.CreateNodeRequest(
-            ProjectId=self.project_id,
-            Spec=spec_json,
-            Scene="DATAWORKS_PROJECT",
+            project_id=self.project_id,
+            spec=spec_json,
+            scene="DATAWORKS_PROJECT",
         )
         try:
             response = self.client.create_node_with_options(request, self.runtime)
