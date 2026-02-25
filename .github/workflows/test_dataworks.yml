@@ -3,6 +3,14 @@ name: "[TEST] DataWorks Integration"
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: '执行操作'
+        required: true
+        default: 'create_node'
+        type: choice
+        options:
+          - create_table
+          - create_node
       project_dir:
         description: '项目目录'
         required: false
@@ -13,6 +21,8 @@ env:
   ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
   ALIYUN_REGION: ${{ secrets.ALIYUN_REGION }}
+  MAXCOMPUTE_PROJECT: ${{ secrets.MAXCOMPUTE_PROJECT }}
+  MAXCOMPUTE_ENDPOINT: ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
 jobs:
   test:
@@ -30,6 +40,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Create Node
-        run: |
-          python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}
+      - name: Create MaxCompute Table
+        if: ${{ github.event.inputs.action == 'create_table' }}
+        run: python scripts/create_table.py --project-dir ${{ github.event.inputs.project_dir }}
+
+      - name: Create DataWorks Node
+        if: ${{ github.event.inputs.action == 'create_node' }}
+        run: python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}
