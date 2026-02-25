@@ -303,17 +303,17 @@ class DataWorksClient:
     # list_resource_groups — 列出数据集成资源组
     # =========================================================================
     def list_resource_groups(self) -> list:
-        """列出数据集成资源组（ResourceGroupType=4）"""
+        """列出数据集成资源组"""
         logger.info("Listing Data Integration resource groups ...")
-        try:
-            request = dataworks_models.ListResourceGroupsRequest(
-                resource_group_type=4,
-            )
-            response = self.client.list_resource_groups_with_options(request, self.runtime)
-            groups = (response.body.data or []) if response.body else []
-            for g in groups:
-                logger.info(f"  Identifier: {g.identifier} | Status: {g.status}")
-            return groups
-        except Exception as e:
-            logger.warning(f"ListResourceGroups error: {e}")
-            return []
+        # 2024 SDK 用 ResourceGroupType（PascalCase），先尝试带过滤，失败则不带参数重试
+        for kwargs in [{"ResourceGroupType": 4}, {}]:
+            try:
+                request = dataworks_models.ListResourceGroupsRequest(**kwargs)
+                response = self.client.list_resource_groups_with_options(request, self.runtime)
+                groups = (response.body.data or []) if response.body else []
+                for g in groups:
+                    logger.info(f"  Identifier: {g.identifier} | Status: {g.status}")
+                return groups
+            except Exception as e:
+                logger.warning(f"ListResourceGroups attempt failed ({kwargs}): {e}")
+        return []
