@@ -1,219 +1,155 @@
+# -*- coding: utf-8 -*-
 """
-dataworks_client.py — DataWorks API 封装（2024-05-18）
+dataworks_client.py
 
-设计原则（参考官方示例代码）：
-  - 只负责 CreateNode，数据源由 DataWorks 控制台预先配置
-  - 不做 ListNodes / ListDataSources / CreateDataSource 等管理操作
-  - 错误信息直接打印 error.message + error.data["Recommend"]
+参考代码直接翻译版本：
+  - create_client()  → DataWorksClient.__init__()，从环境变量读取 AK
+  - build_spec()     → 与参考代码中的 di_job_content + spec_dict 完全对齐
+  - create_node()    → client.create_node_with_options()，原样错误输出
 """
 
 import json
-import logging
+import os
+import sys
 
-from alibabacloud_dataworks_public20240518.client import Client
-from alibabacloud_dataworks_public20240518 import models as dw_models
+from alibabacloud_dataworks_public20240518.client import Client as DataWorksPublicClient
 from alibabacloud_tea_openapi import models as open_api_models
+from alibabacloud_dataworks_public20240518 import models as dw_models
 from alibabacloud_tea_util import models as util_models
 
-logger = logging.getLogger(__name__)
+
+def create_client() -> DataWorksPublicClient:
+    """
+    从环境变量初始化 DataWorks Client（对应参考代码 create_client()）。
+    环境变量：
+      ALIBABA_CLOUD_ACCESS_KEY_ID
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET
+      ALIYUN_REGION
+    """
+    access_key_id     = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+    access_key_secret = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+    region            = os.environ.get("ALIYUN_REGION", "cn-shanghai")
+
+    if not access_key_id or not access_key_secret:
+        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
+        sys.exit(1)
+
+    config = open_api_models.Config(
+        access_key_id=access_key_id,
+        access_key_secret=access_key_secret,
+    )
+    config.endpoint = f"dataworks.{region}.aliyuncs.com"
+    return DataWorksPublicClient(config)
 
 
-class DataWorksClient:
-    """DataWorks API 封装类（2024-05-18）"""
+def build_spec(config: dict) -> str:
+    """
+    根据 config.json 构建 CreateNode 所需的 spec JSON 字符串。
 
-    def __init__(self, access_key_id: str, access_key_secret: str, region: str, project_id: int):
-        self.project_id = project_id
-        self.region = region
+    与参考代码完全对齐：
+      di_job_content → 来自 config["reader"] / config["writer"] / config["resource_group"]
+      spec_dict      → 来自 config 其余字段
+    """
+    resource_group = config["resource_group"]
 
-        config = open_api_models.Config(
-            access_key_id=access_key_id,
-            access_key_secret=access_key_secret,
-        )
-        config.endpoint = f"dataworks.{region}.aliyuncs.com"
-        self.client = Client(config)
-        self.runtime = util_models.RuntimeOptions()
-
-        logger.info(f"DataWorksClient initialized (region={region}, project_id={project_id})")
-
-    # =========================================================================
-    # generate_di_job_content — 生成 DI Job Content
-    # =========================================================================
-    def generate_di_job_content(self, config: dict, table_idx: int) -> dict:
-        """
-        生成写入 spec.nodes[].script.content 的数据集成配置 JSON。
-
-        参考官方示例中的 di_job_content 结构：
-          - extend.mode = "wizard"
-          - extend.resourceGroup = 资源组标识
-          - steps: reader(oss) + writer(odps)
-          - column: [] 自动推断 schema（parquet 推荐）
-        """
-        table = config["Tables"][table_idx]
-        oss_ds = config["OSS"]["DataSourceName"]
-        odps_ds = config["MaxCompute"]["DataSourceName"]
-        resource_group = config["ResourceGroupIdentifier"]
-
-        base_path = config["OSS"].get("BasePath", "")
-        oss_path = f"{base_path}{table['OSS_Object']}"
-        file_format = table["FileFormat"]
-
-        # ---- Reader (OSS) ----
-        reader_param = {
-            "path": oss_path,
-            "datasource": oss_ds,
-            "column": [],           # 空列表 = 自动推断 schema
-            "fileFormat": file_format,
-        }
-        if file_format != "parquet":
-            reader_param["fieldDelimiter"] = table.get("FieldDelimiter", ",")
-            reader_param["encoding"] = table.get("Encoding", "UTF-8")
-
-        # ---- Writer (ODPS/MaxCompute) ----
-        writer_param = {
-            "truncate": False,
-            "datasource": odps_ds,
-            "column": [],
-            "emptyAsNull": False,
-            "table": table["Name"],
-            "consistencyCommit": True,
-        }
-        partition = table.get("Partition")
-        if partition:
-            # DataWorks 调度变量：${bizdate}
-            writer_param["partition"] = f"{partition}='${{bizdate}}'"
-
-        return {
-            "extend": {
-                "mode": "wizard",
-                "resourceGroup": resource_group,
+    # ---- di_job_content（对应参考代码中的同名变量）----
+    di_job_content = {
+        "extend": {
+            "mode": "wizard",
+            "resourceGroup": resource_group
+        },
+        "type": "job",
+        "version": "2.0",
+        "steps": [
+            {
+                "stepType": "oss",
+                "parameter": {
+                    "path":       config["reader"]["path"],
+                    "datasource": config["reader"]["datasource"],
+                    "column":     [],
+                    "fileFormat": config["reader"]["fileFormat"]
+                },
+                "name": "Reader",
+                "category": "reader"
             },
-            "type": "job",
-            "version": "2.0",
-            "steps": [
-                {
-                    "stepType": "oss",
-                    "parameter": reader_param,
-                    "name": "Reader",
-                    "category": "reader",
+            {
+                "stepType": "odps",
+                "parameter": {
+                    "partition":        config["writer"]["partition"],
+                    "truncate":         False,
+                    "datasource":       config["writer"]["datasource"],
+                    "column":           [],
+                    "emptyAsNull":      False,
+                    "table":            config["writer"]["table"],
+                    "consistencyCommit": True
                 },
+                "name": "Writer",
+                "category": "writer"
+            }
+        ],
+        "setting": {
+            "errorLimit": {"record": "0"},
+            "speed": {"throttle": False, "concurrent": 1}
+        }
+    }
+
+    # ---- spec_dict（对应参考代码中的同名变量）----
+    node_name = config["node_name"]
+    spec_dict = {
+        "version": "1.1.0",
+        "kind": "CycleWorkflow",
+        "spec": {
+            "nodes": [
                 {
-                    "stepType": "odps",
-                    "parameter": writer_param,
-                    "name": "Writer",
-                    "category": "writer",
-                },
+                    "recurrence":    "Normal",
+                    "timeout":        0,
+                    "instanceMode": "T+1",
+                    "rerunMode":    "Allowed",
+                    "rerunTimes":    0,
+                    "rerunInterval": 180000,
+                    "script": {
+                        "path":     node_name,
+                        "language": "json",
+                        "runtime":  {"command": "DI"},
+                        "content":  json.dumps(di_job_content, ensure_ascii=False)
+                    },
+                    "trigger": {
+                        "type":      "Scheduler",
+                        "cron":       config["cron"],
+                        "startTime": "1970-01-01 00:00:00",
+                        "endTime":   "9999-01-01 00:00:00"
+                    },
+                    "runtimeResource": {"resourceGroup": resource_group},
+                    "name":  node_name,
+                    "owner": config["owner"]
+                }
             ],
-            "setting": {
-                "errorLimit": {"record": "0"},
-                "speed": {"throttle": False, "concurrent": 1},
-            },
+            "flow": []
         }
+    }
 
-    # =========================================================================
-    # build_node_spec — 构建 CreateNode 的 spec JSON
-    # =========================================================================
-    def build_node_spec(self, config: dict, table_idx: int, node_name: str) -> str:
-        """
-        构建完整的 CycleWorkflow spec JSON 字符串。
+    return json.dumps(spec_dict, ensure_ascii=False)
 
-        结构与官方示例完全对齐：
-          version / kind / spec.nodes[] / spec.flow
-        """
-        resource_group = config["ResourceGroupIdentifier"]
-        schedule = config.get("Schedule", {})
-        cron = schedule.get("CronExpress", "00 00 00 * * ?")
-        owner = config.get("Owner", "")
 
-        di_job_content = self.generate_di_job_content(config, table_idx)
+def create_node(client: DataWorksPublicClient, config: dict, project_id: int) -> None:
+    """
+    调用 CreateNode API（对应参考代码 main() 中的 create_node_with_options）。
+    错误处理与参考代码完全一致。
+    """
+    spec_json = build_spec(config)
 
-        spec_dict = {
-            "version": "1.1.0",
-            "kind": "CycleWorkflow",
-            "spec": {
-                "nodes": [
-                    {
-                        "recurrence": "Normal",
-                        "timeout": 0,
-                        "instanceMode": "T+1",
-                        "rerunMode": "Allowed",
-                        "rerunTimes": 0,
-                        "rerunInterval": 180000,
-                        "script": {
-                            "path": node_name,
-                            "language": "json",
-                            "runtime": {"command": "DI"},
-                            "content": json.dumps(di_job_content, ensure_ascii=False),
-                        },
-                        "trigger": {
-                            "type": "Scheduler",
-                            "cron": cron,
-                            "startTime": "1970-01-01 00:00:00",
-                            "endTime": "9999-01-01 00:00:00",
-                        },
-                        "runtimeResource": {"resourceGroup": resource_group},
-                        "name": node_name,
-                        "owner": owner,
-                    }
-                ],
-                "flow": [],
-            },
-        }
-        return json.dumps(spec_dict, ensure_ascii=False)
+    create_node_request = dw_models.CreateNodeRequest(
+        project_id=project_id,
+        spec=spec_json,
+        scene="DATAWORKS_PROJECT"
+    )
+    runtime = util_models.RuntimeOptions()
 
-    # =========================================================================
-    # create_node — 创建定时数据集成节点（官方示例对齐版本）
-    # =========================================================================
-    def create_node(self, node_name: str, config: dict, table_idx: int) -> int:
-        """
-        调用 CreateNode API 创建节点。
-        与官方示例一致：
-          - CreateNodeRequest(project_id, spec, scene)
-          - client.create_node_with_options(request, runtime)
-          - 异常：打印 error.message + error.data["Recommend"]
-        Returns: node_id (int)
-        """
-        logger.info(f"Creating node '{node_name}' ...")
-        spec_json = self.build_node_spec(config, table_idx, node_name)
-
-        request = dw_models.CreateNodeRequest(
-            project_id=self.project_id,
-            spec=spec_json,
-            scene="DATAWORKS_PROJECT",
-        )
-        try:
-            response = self.client.create_node_with_options(request, self.runtime)
-        except Exception as error:
-            # 与官方示例保持一致的错误处理方式
-            msg = getattr(error, "message", str(error))
-            recommend = ""
-            if hasattr(error, "data") and error.data:
-                recommend = error.data.get("Recommend", "")
-            raise RuntimeError(
-                f"CreateNode failed for '{node_name}': {msg}"
-                + (f"\n  Recommend: {recommend}" if recommend else "")
-            )
-
-        node_id = response.body.data
-        if not node_id:
-            raise RuntimeError(f"CreateNode returned no node_id for '{node_name}'")
-
-        logger.info(f"✅ Node '{node_name}' created successfully (NodeId: {node_id}).")
-        return node_id
-
-    # =========================================================================
-    # list_resource_groups — 连接测试用
-    # =========================================================================
-    def list_resource_groups(self) -> list:
-        """列出数据集成资源组，用于验证 AK 连接"""
-        logger.info("Listing resource groups ...")
-        try:
-            from alibabacloud_dataworks_public20240518 import models as dw_models2
-            request = dw_models2.ListResourceGroupsRequest(resource_group_type=4)
-            response = self.client.list_resource_groups_with_options(request, self.runtime)
-            groups = (response.body.data or []) if response.body else []
-            for g in groups:
-                logger.info(f"  └ {getattr(g, 'identifier', '?')} | {getattr(g, 'status', '?')}")
-            return groups
-        except Exception as e:
-            logger.warning(f"ListResourceGroups: {e}")
-            return []
+    try:
+        resp = client.create_node_with_options(create_node_request, runtime)
+        print(json.dumps(resp.body.to_map(), indent=2, ensure_ascii=False))
+    except Exception as error:
+        # 与参考代码完全一致的错误输出
+        print(error.message)
+        print(error.data.get("Recommend"))
+        raise

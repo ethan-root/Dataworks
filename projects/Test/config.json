@@ -1,28 +1,16 @@
 {
-    "ProjectName": "github",
-    "Owner": "202997971985675034",
-    "OSS": {
-        "DataSourceName": "paruqet_user1",
-        "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
-        "Bucket": "parquet-test1",
-        "BasePath": ""
+    "node_name": "github_test",
+    "owner": "202997971985675034",
+    "resource_group": "dataworks_default_resource_group",
+    "cron": "00 00 02 * * ?",
+    "reader": {
+        "datasource": "paruqet_user1",
+        "path": "parquet/*.parquet",
+        "fileFormat": "parquet"
     },
-    "MaxCompute": {
-        "DataSourceName": "maxcompute_user1",
-        "ProjectName": "maxcompute_parquet_test",
-        "Endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
-    },
-    "Tables": [
-        {
-            "Name": "test",
-            "OSS_Object": "parquet/*.parquet",
-            "FileFormat": "parquet",
-            "Partition": "pt"
-        }
-    ],
-    "ResourceGroupIdentifier": "dataworks_default_resource_group",
-    "Schedule": {
-        "CronExpress": "00 00 02 * * ?",
-        "CycleType": "DAY"
+    "writer": {
+        "datasource": "maxcompute_user1",
+        "table": "test",
+        "partition": "pt='${bizdate}'"
     }
 }

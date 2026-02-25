@@ -1,25 +1,12 @@
-name: "[TEST] DataWorks Integration - Step by Step"
+name: "[TEST] DataWorks Integration"
 
 on:
   workflow_dispatch:
     inputs:
-      step:
-        description: '执行步骤'
-        required: true
-        default: 'check_cli'
-        type: choice
-        options:
-          - check_cli
-          - create_node
-          - all
       project_dir:
-        description: '项目目录 (默认 projects/Test)'
+        description: '项目目录'
         required: false
         default: 'projects/Test'
-      file_id:
-        description: '(submit/deploy) 从 create_job 获取的 FileId'
-        required: false
-        default: ''
 
 env:
   DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
@@ -29,7 +16,6 @@ env:
 
 jobs:
   test:
-    name: "Test - ${{ github.event.inputs.step }}"
     runs-on: ubuntu-latest
 
     steps:
@@ -44,49 +30,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      # ---- 分步执行 ----
-      - name: "Run: ${{ github.event.inputs.step }}"
-        if: ${{ github.event.inputs.step != 'all' }}
-        id: run_step
+      - name: Create Node
         run: |
-          ARGS="--step ${{ github.event.inputs.step }}"
-          ARGS="$ARGS --project-dir ${{ github.event.inputs.project_dir }}"
-          
-          FILE_ID="${{ github.event.inputs.file_id }}"
-          if [ -n "$FILE_ID" ]; then
-            ARGS="$ARGS --file-id $FILE_ID"
-          fi
-          
-          echo "Running: python scripts/deploy.py $ARGS"
-          python scripts/deploy.py $ARGS
-
-      # ---- 全量执行 ----
-      - name: "Run: Full deployment (all)"
-        if: ${{ github.event.inputs.step == 'all' }}
-        run: |
-          python scripts/deploy.py \
-            --projects-dir projects \
-            --projects "$(basename ${{ github.event.inputs.project_dir }})"
-
-      # ---- 汇总 ----
-      - name: Summary
-        if: always()
-        run: |
-          echo ""
-          echo "╔═══════════════════════════════════════════════════════════╗"
-          echo "║              Test Run Complete                           ║"
-          echo "╠═══════════════════════════════════════════════════════════╣"
-          echo "║  Step:       ${{ github.event.inputs.step }}"
-          echo "║  Project:    ${{ github.event.inputs.project_dir }}"
-          echo "║  Project ID: ${{ env.DATAWORKS_PROJECT_ID }}"
-          echo "╚═══════════════════════════════════════════════════════════╝"
-          echo ""
-          echo "📋 测试流程:"
-          echo "  check_cli          → 验证 SDK 连接 & 查看资源组"
-          echo "  check_datasources  → 检查数据源是否存在"
-          echo "  create_oss_ds      → 创建 OSS 数据源"
-          echo "  create_odps_ds     → 创建 MaxCompute 数据源"
-          echo "  create_job         → 创建同步 Job (输出 FileId)"
-          echo "  submit             → 提交任务 (需要 FileId)"
-          echo "  deploy             → 发布到生产 (需要 FileId)"
-          echo "  all                → 执行完整流程"
+          python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}
