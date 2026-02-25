@@ -1,5 +1,6 @@
 {
     "ProjectName": "Balenciaga",
+    "Owner": "YOUR_DATAWORKS_USER_UID",
     "OSS": {
         "DataSourceName": "oss_balenciaga",
         "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
@@ -18,24 +19,7 @@
             "FileFormat": "csv",
             "FieldDelimiter": ",",
             "Encoding": "UTF-8",
-            "Columns": [
-                {
-                    "name": "item_id",
-                    "type": "string"
-                },
-                {
-                    "name": "item_name",
-                    "type": "string"
-                },
-                {
-                    "name": "price",
-                    "type": "double"
-                },
-                {
-                    "name": "category",
-                    "type": "string"
-                }
-            ]
+            "Partition": "pt"
         },
         {
             "Name": "User",
@@ -43,24 +27,7 @@
             "FileFormat": "csv",
             "FieldDelimiter": ",",
             "Encoding": "UTF-8",
-            "Columns": [
-                {
-                    "name": "user_id",
-                    "type": "string"
-                },
-                {
-                    "name": "user_name",
-                    "type": "string"
-                },
-                {
-                    "name": "email",
-                    "type": "string"
-                },
-                {
-                    "name": "phone",
-                    "type": "string"
-                }
-            ]
+            "Partition": "pt"
         }
     ],
     "ResourceGroupIdentifier": "S_res_group_xxx",

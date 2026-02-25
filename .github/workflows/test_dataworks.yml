@@ -13,9 +13,7 @@ on:
           - check_datasources
           - create_oss_ds
           - create_odps_ds
-          - create_job
-          - submit
-          - deploy
+          - create_node
           - all
       project_dir:
         description: '项目目录 (默认 projects/Test)'

@@ -1,5 +1,6 @@
 {
     "ProjectName": "ParquetTest",
+    "Owner": "202997971985675034",
     "OSS": {
         "DataSourceName": "paruqet_user1",
         "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
@@ -16,24 +17,7 @@
             "Name": "user1",
             "OSS_Object": "parquet/*.parquet",
             "FileFormat": "parquet",
-            "FieldDelimiter": "",
-            "Encoding": "UTF-8",
-            "Columns": [
-                {
-                    "name": "id",
-                    "type": "string"
-                },
-                {
-                    "name": "name",
-                    "type": "string"
-                },
-                {
-                    "name": "value",
-                    "type": "string"
-                }
-            ],
-            "Partition": "pt",
-            "WriteMode": "truncate"
+            "Partition": "pt"
         }
     ],
     "ResourceGroupIdentifier": "dataworks_default_resource_group",

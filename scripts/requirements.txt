@@ -1,3 +1,4 @@
-alibabacloud-dataworks-public20200518>=3.0.0
+alibabacloud-dataworks-public20240518>=2.0.0
 alibabacloud-tea-openapi>=0.3.0
+alibabacloud-tea-util>=0.3.0
 alibabacloud-credentials>=0.3.0
