@@ -38,4 +38,4 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Deploy DataWorks Sync Tasks
-        run: python scripts/deploy.py --projects "${{ github.event.inputs.projects }}"
+        run: python scripts/deploy.py --projects-dir projects
