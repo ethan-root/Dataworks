@@ -131,6 +131,7 @@ class DataWorksClient:
 
         logger.info(f"Creating OSS datasource '{ds_name}' ...")
         conn_props = json.dumps({
+            "connectionPropertiesMode": "AccessKey",
             "envType": "Prod",
             "endpoint": config["OSS"]["Endpoint"],
             "bucket": config["OSS"]["Bucket"],
@@ -160,6 +161,7 @@ class DataWorksClient:
 
         logger.info(f"Creating MaxCompute datasource '{ds_name}' ...")
         conn_props = json.dumps({
+            "connectionPropertiesMode": "UserName",
             "envType": "Prod",
             "projectName": config["MaxCompute"]["ProjectName"],
             "endpoint": config["MaxCompute"]["Endpoint"],
