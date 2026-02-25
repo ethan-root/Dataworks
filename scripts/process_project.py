@@ -1,8 +1,7 @@
 """
 process_project.py — 单项目处理逻辑
-读取 config.json → 遍历 Tables → 检查/创建节点
 
-使用 2024-05-18 API，CreateNode 一步完成（无需 Submit + Deploy）
+设计原则：数据源由 DataWorks 控制台预先配置，脚本只负责创建节点。
 """
 
 import json
@@ -16,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 def process_project(client: DataWorksClient, project_dir: str) -> dict:
     """
-    处理单个品牌项目的所有 Table
+    处理单个品牌项目的所有 Table，为每个 Table 创建定时同步节点。
 
     Args:
         client:      DataWorksClient 实例
-        project_dir: 项目目录路径（包含 config.json）
+        project_dir: 项目目录（包含 config.json）
 
     Returns:
         {"created": N, "skipped": N, "failed": N}
@@ -35,48 +34,33 @@ def process_project(client: DataWorksClient, project_dir: str) -> dict:
 
     project_name = config["ProjectName"]
     tables = config["Tables"]
-    table_count = len(tables)
 
     logger.info("=" * 65)
-    logger.info(f"Processing Project: {project_name}  ({table_count} table(s))")
+    logger.info(f"Project: {project_name}  ({len(tables)} table(s))")
     logger.info("=" * 65)
 
     stats = {"created": 0, "skipped": 0, "failed": 0}
 
     for i, table in enumerate(tables):
-        table_name = table["Name"]
-        node_name = f"{project_name}_{table_name}"
-
-        logger.info("-" * 65)
-        logger.info(f"[{i + 1}/{table_count}] Node: {node_name}")
-        logger.info("-" * 65)
+        node_name = f"{project_name}_{table['Name']}"
+        logger.info(f"[{i + 1}/{len(tables)}] {node_name}")
 
         try:
-            # Step 1: 检查节点是否已存在
-            if client.node_exists(node_name):
-                logger.info(f"SKIP: Node '{node_name}' already exists.")
-                stats["skipped"] += 1
-                continue
-
-            # Step 2: 确保数据源存在
-            client.ensure_oss_datasource(config)
-            client.ensure_odps_datasource(config)
-
-            # Step 3: 生成 spec 并创建节点（一步完成，立即生效）
             node_id = client.create_node(node_name, config, i)
-            logger.info(f"SUCCESS: Node '{node_name}' created (NodeId: {node_id}).")
+            logger.info(f"  ✅ Created (NodeId: {node_id})")
             stats["created"] += 1
-
         except Exception as e:
-            logger.error(f"FAIL: Node '{node_name}' — {e}")
-            stats["failed"] += 1
-            continue
+            err_str = str(e)
+            # 节点已存在时跳过（非致命，继续处理下一个）
+            if "AlreadyExists" in err_str or "already exists" in err_str.lower():
+                logger.warning(f"  ⚠️  Node '{node_name}' already exists, skipping.")
+                stats["skipped"] += 1
+            else:
+                logger.error(f"  ❌ Failed: {e}")
+                stats["failed"] += 1
 
-    logger.info("=" * 65)
+    logger.info("-" * 65)
     logger.info(
-        f"Project '{project_name}' done | "
-        f"Created={stats['created']} | Skipped={stats['skipped']} | Failed={stats['failed']}"
+        f"Done: Created={stats['created']} | Skipped={stats['skipped']} | Failed={stats['failed']}"
     )
-    logger.info("=" * 65)
-
     return stats

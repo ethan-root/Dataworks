@@ -10,9 +10,6 @@ on:
         type: choice
         options:
           - check_cli
-          - check_datasources
-          - create_oss_ds
-          - create_odps_ds
           - create_node
           - all
       project_dir:
