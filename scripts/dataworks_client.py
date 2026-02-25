@@ -1,17 +1,14 @@
 """
 dataworks_client.py — DataWorks API 封装类（2024-05-18 版本）
 
-使用 CreateNode API 一次性创建并调度数据集成节点，无需单独的 Submit + Deploy 步骤。
-
-API 文档: https://api.aliyun.com/product/dataworks-public (版本: 2024-05-18)
+2024 SDK 规范：所有 Request 构造参数使用 PascalCase。
 """
 
 import json
 import logging
-from typing import Optional
 
 from alibabacloud_dataworks_public20240518.client import Client
-from alibabacloud_dataworks_public20240518 import models as dataworks_models
+from alibabacloud_dataworks_public20240518 import models as dw
 from alibabacloud_tea_openapi import models as open_api_models
 from alibabacloud_tea_util import models as util_models
 
@@ -36,57 +33,74 @@ class DataWorksClient:
         logger.info(f"DataWorksClient initialized (region={region}, project_id={project_id})")
 
     # =========================================================================
-    # node_exists — 检查同名节点是否已存在
+    # node_exists
     # =========================================================================
     def node_exists(self, node_name: str) -> bool:
-        """检查 DataWorks 中是否已存在同名节点"""
+        """检查节点是否已存在（ListNodes）"""
         logger.info(f"Checking if node '{node_name}' exists ...")
         try:
-            request = dataworks_models.ListNodesRequest(
-                project_id=self.project_id,
-                keyword=node_name,
-                page_size=100,
-                page_number=1,
+            # 2024 SDK 全部 PascalCase
+            request = dw.ListNodesRequest(
+                ProjectId=self.project_id,
+                Keyword=node_name,
+                PageSize=100,
+                PageNumber=1,
             )
             response = self.client.list_nodes_with_options(request, self.runtime)
-            nodes = (response.body.data.nodes or []) if response.body.data else []
-            matches = [n for n in nodes if n.name == node_name]
+            body = response.body
+            # 响应结构: body.data.nodes 或 body.nodes，做兼容
+            nodes = []
+            if hasattr(body, "data") and body.data and hasattr(body.data, "nodes"):
+                nodes = body.data.nodes or []
+            elif hasattr(body, "nodes"):
+                nodes = body.nodes or []
+
+            matches = [n for n in nodes if getattr(n, "name", None) == node_name]
             if matches:
-                logger.info(f"Node '{node_name}' already exists ({len(matches)} match(es)).")
+                logger.info(f"Node '{node_name}' already exists.")
                 return True
             logger.info(f"Node '{node_name}' does not exist.")
             return False
         except Exception as e:
-            logger.warning(f"ListNodes API error: {e}, treating as not found.")
+            logger.warning(f"ListNodes error: {e}. Treating as not found.")
             return False
 
     # =========================================================================
-    # datasource_exists — 检查数据源是否已存在
+    # datasource_exists
     # =========================================================================
     def datasource_exists(self, ds_name: str) -> bool:
-        """检查数据源是否已存在"""
+        """检查数据源是否已存在（ListDataSources）"""
         logger.info(f"Checking if datasource '{ds_name}' exists ...")
         try:
-            request = dataworks_models.ListDataSourcesRequest(
-                project_id=self.project_id,
-                name=ds_name,
-                page_size=20,
-                page_number=1,
+            request = dw.ListDataSourcesRequest(
+                ProjectId=self.project_id,
+                Name=ds_name,
+                PageSize=20,
+                PageNumber=1,
             )
             response = self.client.list_data_sources_with_options(request, self.runtime)
-            sources = (response.body.data.data_sources or []) if response.body.data else []
-            matches = [s for s in sources if s.name == ds_name]
+            body = response.body
+
+            # 兼容两种响应结构
+            sources = []
+            if hasattr(body, "data") and body.data:
+                data = body.data
+                sources = getattr(data, "data_sources", None) or getattr(data, "dataSources", None) or []
+            elif hasattr(body, "data_sources"):
+                sources = body.data_sources or []
+
+            matches = [s for s in sources if getattr(s, "name", None) == ds_name]
             if matches:
                 logger.info(f"Datasource '{ds_name}' exists.")
                 return True
-            logger.info(f"Datasource '{ds_name}' does not exist.")
+            logger.info(f"Datasource '{ds_name}' not found.")
             return False
         except Exception as e:
-            logger.warning(f"ListDataSources API error: {e}, treating as not found.")
+            logger.warning(f"ListDataSources error: {e}. Treating as not found.")
             return False
 
     # =========================================================================
-    # ensure_oss_datasource — 确保 OSS 数据源存在
+    # ensure_oss_datasource
     # =========================================================================
     def ensure_oss_datasource(self, config: dict) -> None:
         """确保 OSS 数据源存在，不存在则创建"""
@@ -100,19 +114,21 @@ class DataWorksClient:
             "endpoint": config["OSS"]["Endpoint"],
             "bucket": config["OSS"]["Bucket"],
         })
-        request = dataworks_models.CreateDataSourceRequest(
-            project_id=self.project_id,
-            name=ds_name,
-            data_source_type="oss",
-            connection_properties=conn_props,
+        request = dw.CreateDataSourceRequest(
+            ProjectId=self.project_id,
+            Name=ds_name,
+            DataSourceType="oss",
+            ConnectionProperties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
-        if not response.body.success:
-            raise RuntimeError(f"Failed to create OSS datasource '{ds_name}': {response.body}")
+        body = response.body
+        success = getattr(body, "success", None)
+        if success is False:
+            raise RuntimeError(f"Failed to create OSS datasource '{ds_name}': {body}")
         logger.info(f"OSS datasource '{ds_name}' created successfully.")
 
     # =========================================================================
-    # ensure_odps_datasource — 确保 MaxCompute 数据源存在
+    # ensure_odps_datasource
     # =========================================================================
     def ensure_odps_datasource(self, config: dict) -> None:
         """确保 MaxCompute 数据源存在，不存在则创建"""
@@ -126,28 +142,24 @@ class DataWorksClient:
             "projectName": config["MaxCompute"]["ProjectName"],
             "endpoint": config["MaxCompute"]["Endpoint"],
         })
-        request = dataworks_models.CreateDataSourceRequest(
-            project_id=self.project_id,
-            name=ds_name,
-            data_source_type="odps",
-            connection_properties=conn_props,
+        request = dw.CreateDataSourceRequest(
+            ProjectId=self.project_id,
+            Name=ds_name,
+            DataSourceType="odps",
+            ConnectionProperties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
-        if not response.body.success:
-            raise RuntimeError(f"Failed to create MaxCompute datasource '{ds_name}': {response.body}")
+        body = response.body
+        success = getattr(body, "success", None)
+        if success is False:
+            raise RuntimeError(f"Failed to create MaxCompute datasource '{ds_name}': {body}")
         logger.info(f"MaxCompute datasource '{ds_name}' created successfully.")
 
     # =========================================================================
-    # generate_di_job_content — 生成 DI Job Content（嵌入 spec 中的数据集成配置）
+    # generate_di_job_content
     # =========================================================================
     def generate_di_job_content(self, config: dict, table_idx: int) -> dict:
-        """
-        生成 di_job_content，支持 parquet/csv 格式 + 分区配置。
-
-        - Parquet: column=[] 让 DataWorks 自动推断 schema
-        - CSV: column=[] 同样支持（或可显式指定）
-        - Partition: 从 config 读取，若无则不写 partition 字段
-        """
+        """生成 di_job_content（嵌入 spec 内）"""
         table = config["Tables"][table_idx]
         oss_ds = config["OSS"]["DataSourceName"]
         odps_ds = config["MaxCompute"]["DataSourceName"]
@@ -157,71 +169,49 @@ class DataWorksClient:
         oss_path = f"{base_path}{table['OSS_Object']}"
         file_format = table["FileFormat"]
 
-        # ---- Reader ----
+        # Reader
         reader_param = {
             "path": oss_path,
             "datasource": oss_ds,
-            "column": [],          # 空列表 = 自动推断 schema（parquet 推荐方式）
+            "column": [],
             "fileFormat": file_format,
         }
-        # CSV 额外参数
         if file_format != "parquet":
             reader_param["fieldDelimiter"] = table.get("FieldDelimiter", ",")
             reader_param["encoding"] = table.get("Encoding", "UTF-8")
 
-        # ---- Writer ----
+        # Writer
         writer_param = {
             "truncate": False,
             "datasource": odps_ds,
-            "column": [],          # 空列表 = 与来源列自动对应
+            "column": [],
             "emptyAsNull": False,
             "table": table["Name"],
             "consistencyCommit": True,
         }
-        # 分区配置
         partition = table.get("Partition")
         if partition:
-            # 格式: "pt='${bizdate}'" — DataWorks 调度变量
             writer_param["partition"] = f"{partition}='${{bizdate}}'"
 
-        di_job_content = {
-            "extend": {
-                "mode": "wizard",
-                "resourceGroup": resource_group,
-            },
+        return {
+            "extend": {"mode": "wizard", "resourceGroup": resource_group},
             "type": "job",
             "version": "2.0",
             "steps": [
-                {
-                    "stepType": "oss",
-                    "parameter": reader_param,
-                    "name": "Reader",
-                    "category": "reader",
-                },
-                {
-                    "stepType": "odps",
-                    "parameter": writer_param,
-                    "name": "Writer",
-                    "category": "writer",
-                },
+                {"stepType": "oss",  "parameter": reader_param, "name": "Reader", "category": "reader"},
+                {"stepType": "odps", "parameter": writer_param, "name": "Writer", "category": "writer"},
             ],
             "setting": {
                 "errorLimit": {"record": "0"},
                 "speed": {"throttle": False, "concurrent": 1},
             },
         }
-        return di_job_content
 
     # =========================================================================
-    # build_node_spec — 构建 CreateNode 的 spec JSON
+    # build_node_spec
     # =========================================================================
     def build_node_spec(self, config: dict, table_idx: int, node_name: str) -> str:
-        """
-        构建完整的 CycleWorkflow spec JSON 字符串，传给 CreateNode API。
-
-        spec 包含：节点名称、调度 cron、资源组、DI 内容
-        """
-        table = config["Tables"][table_idx]
+        """构建 CreateNode 的 spec JSON 字符串"""
         resource_group = config["ResourceGroupIdentifier"]
         schedule = config.get("Schedule", {})
         cron = schedule.get("CronExpress", "00 00 02 * * ?")
@@ -233,87 +223,73 @@ class DataWorksClient:
             "version": "1.1.0",
             "kind": "CycleWorkflow",
             "spec": {
-                "nodes": [
-                    {
-                        "recurrence": "Normal",
-                        "timeout": 0,
-                        "instanceMode": "T+1",
-                        "rerunMode": "Allowed",
-                        "rerunTimes": 0,
-                        "rerunInterval": 180000,
-                        "script": {
-                            "path": node_name,
-                            "language": "json",
-                            "runtime": {"command": "DI"},
-                            "content": json.dumps(di_job_content, ensure_ascii=False),
-                        },
-                        "trigger": {
-                            "type": "Scheduler",
-                            "cron": cron,
-                            "startTime": "1970-01-01 00:00:00",
-                            "endTime": "9999-01-01 00:00:00",
-                        },
-                        "runtimeResource": {
-                            "resourceGroup": resource_group,
-                        },
-                        "name": node_name,
-                        "owner": owner,
-                    }
-                ],
+                "nodes": [{
+                    "recurrence": "Normal",
+                    "timeout": 0,
+                    "instanceMode": "T+1",
+                    "rerunMode": "Allowed",
+                    "rerunTimes": 0,
+                    "rerunInterval": 180000,
+                    "script": {
+                        "path": node_name,
+                        "language": "json",
+                        "runtime": {"command": "DI"},
+                        "content": json.dumps(di_job_content, ensure_ascii=False),
+                    },
+                    "trigger": {
+                        "type": "Scheduler",
+                        "cron": cron,
+                        "startTime": "1970-01-01 00:00:00",
+                        "endTime": "9999-01-01 00:00:00",
+                    },
+                    "runtimeResource": {"resourceGroup": resource_group},
+                    "name": node_name,
+                    "owner": owner,
+                }],
                 "flow": [],
             },
         }
         return json.dumps(spec_dict, ensure_ascii=False)
 
     # =========================================================================
-    # create_node — 创建数据集成节点（一步完成，无需 Submit + Deploy）
+    # create_node
     # =========================================================================
     def create_node(self, node_name: str, config: dict, table_idx: int) -> int:
-        """
-        调用 CreateNode API 创建定时数据集成节点。
-        新 API 创建即发布，无需单独 Submit + Deploy。
-
-        Returns:
-            node_id (int)
-        """
+        """调用 CreateNode API，一步创建定时节点"""
         logger.info(f"Creating node '{node_name}' ...")
-
         spec_json = self.build_node_spec(config, table_idx, node_name)
-        logger.debug(f"Node spec:\n{spec_json}")
 
-        request = dataworks_models.CreateNodeRequest(
-            project_id=self.project_id,
-            spec=spec_json,
-            scene="DATAWORKS_PROJECT",
+        request = dw.CreateNodeRequest(
+            ProjectId=self.project_id,
+            Spec=spec_json,
+            Scene="DATAWORKS_PROJECT",
         )
-
         try:
             response = self.client.create_node_with_options(request, self.runtime)
         except Exception as e:
-            raise RuntimeError(f"CreateNode API error for '{node_name}': {e}")
+            raise RuntimeError(f"CreateNode failed for '{node_name}': {e}")
 
         node_id = response.body.data
         if not node_id:
             raise RuntimeError(f"CreateNode returned no node_id for '{node_name}'")
 
-        logger.info(f"Node '{node_name}' created successfully (NodeId: {node_id}).")
+        logger.info(f"Node '{node_name}' created (NodeId: {node_id}).")
         return node_id
 
     # =========================================================================
-    # list_resource_groups — 列出数据集成资源组
+    # list_resource_groups
     # =========================================================================
     def list_resource_groups(self) -> list:
         """列出数据集成资源组"""
         logger.info("Listing Data Integration resource groups ...")
-        # 2024 SDK 用 ResourceGroupType（PascalCase），先尝试带过滤，失败则不带参数重试
         for kwargs in [{"ResourceGroupType": 4}, {}]:
             try:
-                request = dataworks_models.ListResourceGroupsRequest(**kwargs)
+                request = dw.ListResourceGroupsRequest(**kwargs)
                 response = self.client.list_resource_groups_with_options(request, self.runtime)
                 groups = (response.body.data or []) if response.body else []
                 for g in groups:
                     logger.info(f"  Identifier: {g.identifier} | Status: {g.status}")
                 return groups
             except Exception as e:
-                logger.warning(f"ListResourceGroups attempt failed ({kwargs}): {e}")
+                logger.warning(f"ListResourceGroups attempt {kwargs}: {e}")
         return []
