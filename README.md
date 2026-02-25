@@ -1,21 +1,33 @@
 # DataWorks Data Integration — OSS to MaxCompute
 
-使用 GitHub Actions 自动化管理 Aliyun DataWorks 数据集成任务，支持多品牌项目并行管理。
+使用 GitHub Actions + Python 自动化管理 Aliyun DataWorks 数据集成定时任务。
+
+## 架构
+
+```
+GitHub Actions YAML  →  Python 脚本  →  DataWorks API
+  (流程编排)           (控制逻辑)       (创建定时任务)
+                           ↑
+                    projects/*/config.json
+                      (任务参数配置)
+```
 
 ## 项目结构
 
 ```
 Dataworks/
 ├── .github/workflows/
-│   └── dataworks_sync.yml        # GitHub Actions 工作流
-├── projects/                      # 品牌项目目录
+│   ├── dataworks_sync.yml         # 生产部署流水线
+│   └── test_dataworks.yml         # 分步测试流水线
+├── projects/                       # 品牌项目目录
+│   ├── Test/config.json
 │   ├── Gucci/config.json
-│   ├── Balenciaga/config.json
-│   └── .../config.json
+│   └── Balenciaga/config.json
 ├── scripts/
-│   ├── deploy.sh                  # 主部署入口
-│   ├── process_project.sh         # 单项目处理逻辑
-│   └── utils.sh                   # DataWorks API 工具函数
+│   ├── dataworks_client.py        # DataWorks API 封装类
+│   ├── process_project.py         # 单项目处理逻辑
+│   ├── deploy.py                  # CLI 主入口
+│   └── requirements.txt           # Python 依赖
 └── README.md
 ```
 
@@ -41,7 +53,7 @@ Dataworks/
     "DataSourceName": "oss_brand",
     "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
     "Bucket": "brand-data-bucket",
-    "BasePath": "data/export/"
+    "BasePath": ""
   },
   "MaxCompute": {
     "DataSourceName": "odps_brand",
@@ -50,41 +62,58 @@ Dataworks/
   },
   "Tables": [
     {
-      "Name": "TableName",
-      "OSS_Object": "table_path/",
-      "FileFormat": "csv",
-      "FieldDelimiter": ",",
-      "Encoding": "UTF-8",
+      "Name": "table1",
+      "OSS_Object": "path/*.parquet",
+      "FileFormat": "parquet",
       "Columns": [
         {"name": "col1", "type": "string"},
         {"name": "col2", "type": "double"}
-      ]
+      ],
+      "Partition": "pt"
     }
   ],
-  "ResourceGroupIdentifier": "S_res_group_xxx",
-  "Schedule": {
-    "CronExpress": "00 00 02 * * ?",
-    "CycleType": "DAY"
-  }
+  "ResourceGroupIdentifier": "dataworks_default_resource_group",
+  "Schedule": { "CronExpress": "00 00 02 * * ?", "CycleType": "DAY" }
 }
 ```
 
 ### 3. 触发部署
 
-- **自动触发**：Push `config.json` 变更到 `main` 分支
-- **手动触发**：GitHub Actions → `workflow_dispatch`，可指定项目名
+- **自动触发**：Push `config.json` 到 `main` 分支
+- **手动触发**：GitHub Actions → `workflow_dispatch`
 
-## JobName 命名规范
+### 4. 分步测试
 
+使用 `[TEST] DataWorks Integration` 工作流，选择步骤：
+
+| Step | 说明 |
+|---|---|
+| `check_cli` | 验证 SDK 连接 & 资源组列表 |
+| `check_datasources` | 检查数据源是否存在 |
+| `create_oss_ds` | 创建 OSS 数据源 |
+| `create_odps_ds` | 创建 MaxCompute 数据源 |
+| `create_job` | 创建同步 Job（输出 FileId）|
+| `submit` | 提交任务 |
+| `deploy` | 发布到生产 |
+
+## 本地执行
+
+```bash
+pip install -r scripts/requirements.txt
+
+# 设置环境变量
+export ALIBABA_CLOUD_ACCESS_KEY_ID=xxx
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxx
+export ALIYUN_REGION=cn-shanghai
+export DATAWORKS_PROJECT_ID=1186017
+
+# 全量部署
+python scripts/deploy.py
+
+# 指定项目
+python scripts/deploy.py --projects Gucci
+
+# 分步测试
+python scripts/deploy.py --step check_cli
+python scripts/deploy.py --step create_job --project-dir projects/Test
 ```
-JobName = {ProjectName}_{TableName}
-例: Gucci_Item, Gucci_User, Balenciaga_Item
-```
-
-## 处理逻辑
-
-1. 检查 Job 是否存在 → 存在则跳过
-2. 检查/创建 OSS 数据源
-3. 检查/创建 MaxCompute 数据源
-4. 创建同步任务（`CreateDISyncTask`）
-5. 提交（`SubmitFile`）→ 发布到生产（`DeployFile`）

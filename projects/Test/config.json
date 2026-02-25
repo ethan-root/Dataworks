@@ -1,22 +1,22 @@
 {
-    "ProjectName": "Test",
+    "ProjectName": "ParquetTest",
     "OSS": {
-        "DataSourceName": "oss_test",
+        "DataSourceName": "paruqet_user1",
         "Endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
-        "Bucket": "your-test-bucket",
-        "BasePath": "test/data/"
+        "Bucket": "parquet-test1",
+        "BasePath": ""
     },
     "MaxCompute": {
-        "DataSourceName": "odps_test",
-        "ProjectName": "your_mc_project",
+        "DataSourceName": "maxcompute_user1",
+        "ProjectName": "maxcompute_parquet_test",
         "Endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
     },
     "Tables": [
         {
-            "Name": "HelloWorld",
-            "OSS_Object": "hello/",
-            "FileFormat": "csv",
-            "FieldDelimiter": ",",
+            "Name": "user1",
+            "OSS_Object": "parquet/*.parquet",
+            "FileFormat": "parquet",
+            "FieldDelimiter": "",
             "Encoding": "UTF-8",
             "Columns": [
                 {
@@ -31,10 +31,12 @@
                     "name": "value",
                     "type": "string"
                 }
-            ]
+            ],
+            "Partition": "pt",
+            "WriteMode": "truncate"
         }
     ],
-    "ResourceGroupIdentifier": "your_resource_group_identifier",
+    "ResourceGroupIdentifier": "dataworks_default_resource_group",
     "Schedule": {
         "CronExpress": "00 00 02 * * ?",
         "CycleType": "DAY"
