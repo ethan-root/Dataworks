@@ -131,16 +131,15 @@ class DataWorksClient:
 
         logger.info(f"Creating OSS datasource '{ds_name}' ...")
         conn_props = json.dumps({
-            "connectionPropertiesMode": "AccessKey",
             "envType": "Prod",
             "endpoint": config["OSS"]["Endpoint"],
             "bucket": config["OSS"]["Bucket"],
         })
-        # 2024 SDK: 'type' (not 'data_source_type')
         request = dw.CreateDataSourceRequest(
             project_id=self.project_id,
             name=ds_name,
             type="oss",
+            connection_properties_mode="AccessKey",
             connection_properties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
@@ -161,7 +160,6 @@ class DataWorksClient:
 
         logger.info(f"Creating MaxCompute datasource '{ds_name}' ...")
         conn_props = json.dumps({
-            "connectionPropertiesMode": "UserName",
             "envType": "Prod",
             "projectName": config["MaxCompute"]["ProjectName"],
             "endpoint": config["MaxCompute"]["Endpoint"],
@@ -170,6 +168,7 @@ class DataWorksClient:
             project_id=self.project_id,
             name=ds_name,
             type="odps",
+            connection_properties_mode="UserName",
             connection_properties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
