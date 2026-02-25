@@ -1,7 +1,12 @@
 """
 dataworks_client.py — DataWorks API 封装类（2024-05-18 版本）
 
-2024 SDK 规范：所有 Request 构造参数使用 PascalCase。
+2024 SDK 规范（经实测验证）：
+  - 所有 Request 构造参数使用 snake_case
+  - ListNodesRequest:       project_id, name, page_size, page_number
+  - ListDataSourcesRequest: project_id, name, page_size, page_number
+  - CreateDataSourceRequest: project_id, name, type, connection_properties
+  - CreateNodeRequest:       project_id, spec, scene   ← 已验证
 """
 
 import json
@@ -33,33 +38,53 @@ class DataWorksClient:
         logger.info(f"DataWorksClient initialized (region={region}, project_id={project_id})")
 
     # =========================================================================
+    # _safe_list — 通用分页列表调用，兼容不同响应结构
+    # =========================================================================
+    def _safe_list(self, api_call, request, *list_paths):
+        """
+        调用 list API，从响应 body 中按路径取列表。
+        list_paths: 按优先级依次尝试的属性路径，如 ('data.nodes',) 或 ('data_sources',)
+        """
+        try:
+            response = api_call(request, self.runtime)
+            body = response.body
+            for path in list_paths:
+                obj = body
+                for attr in path.split("."):
+                    obj = getattr(obj, attr, None)
+                    if obj is None:
+                        break
+                if obj is not None:
+                    return list(obj)
+            return []
+        except Exception as e:
+            raise e  # 交给调用方处理
+
+    # =========================================================================
     # node_exists
     # =========================================================================
     def node_exists(self, node_name: str) -> bool:
-        """检查节点是否已存在（ListNodes）"""
+        """检查节点是否已存在（ListNodes，按 name 过滤）"""
         logger.info(f"Checking if node '{node_name}' exists ...")
         try:
-            # 2024 SDK 全部 PascalCase
+            # 2024 SDK: name 参数做关键字过滤；无 keyword 参数
             request = dw.ListNodesRequest(
-                ProjectId=self.project_id,
-                Keyword=node_name,
-                PageSize=100,
-                PageNumber=1,
+                project_id=self.project_id,
+                name=node_name,
+                page_size=100,
+                page_number=1,
             )
-            response = self.client.list_nodes_with_options(request, self.runtime)
-            body = response.body
-            # 响应结构: body.data.nodes 或 body.nodes，做兼容
-            nodes = []
-            if hasattr(body, "data") and body.data and hasattr(body.data, "nodes"):
-                nodes = body.data.nodes or []
-            elif hasattr(body, "nodes"):
-                nodes = body.nodes or []
-
+            nodes = self._safe_list(
+                self.client.list_nodes_with_options,
+                request,
+                "data.nodes",   # 优先路径
+                "nodes",        # 备选路径
+            )
             matches = [n for n in nodes if getattr(n, "name", None) == node_name]
             if matches:
                 logger.info(f"Node '{node_name}' already exists.")
                 return True
-            logger.info(f"Node '{node_name}' does not exist.")
+            logger.info(f"Node '{node_name}' not found.")
             return False
         except Exception as e:
             logger.warning(f"ListNodes error: {e}. Treating as not found.")
@@ -73,22 +98,18 @@ class DataWorksClient:
         logger.info(f"Checking if datasource '{ds_name}' exists ...")
         try:
             request = dw.ListDataSourcesRequest(
-                ProjectId=self.project_id,
-                Name=ds_name,
-                PageSize=20,
-                PageNumber=1,
+                project_id=self.project_id,
+                name=ds_name,
+                page_size=20,
+                page_number=1,
             )
-            response = self.client.list_data_sources_with_options(request, self.runtime)
-            body = response.body
-
-            # 兼容两种响应结构
-            sources = []
-            if hasattr(body, "data") and body.data:
-                data = body.data
-                sources = getattr(data, "data_sources", None) or getattr(data, "dataSources", None) or []
-            elif hasattr(body, "data_sources"):
-                sources = body.data_sources or []
-
+            sources = self._safe_list(
+                self.client.list_data_sources_with_options,
+                request,
+                "data.data_sources",   # 优先
+                "data_sources",        # 备选
+                "data",                # 再备选
+            )
             matches = [s for s in sources if getattr(s, "name", None) == ds_name]
             if matches:
                 logger.info(f"Datasource '{ds_name}' exists.")
@@ -114,18 +135,19 @@ class DataWorksClient:
             "endpoint": config["OSS"]["Endpoint"],
             "bucket": config["OSS"]["Bucket"],
         })
+        # 2024 SDK: 'type' (not 'data_source_type')
         request = dw.CreateDataSourceRequest(
-            ProjectId=self.project_id,
-            Name=ds_name,
-            DataSourceType="oss",
-            ConnectionProperties=conn_props,
+            project_id=self.project_id,
+            name=ds_name,
+            type="oss",
+            connection_properties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
         body = response.body
         success = getattr(body, "success", None)
         if success is False:
             raise RuntimeError(f"Failed to create OSS datasource '{ds_name}': {body}")
-        logger.info(f"OSS datasource '{ds_name}' created successfully.")
+        logger.info(f"OSS datasource '{ds_name}' created.")
 
     # =========================================================================
     # ensure_odps_datasource
@@ -143,17 +165,17 @@ class DataWorksClient:
             "endpoint": config["MaxCompute"]["Endpoint"],
         })
         request = dw.CreateDataSourceRequest(
-            ProjectId=self.project_id,
-            Name=ds_name,
-            DataSourceType="odps",
-            ConnectionProperties=conn_props,
+            project_id=self.project_id,
+            name=ds_name,
+            type="odps",
+            connection_properties=conn_props,
         )
         response = self.client.create_data_source_with_options(request, self.runtime)
         body = response.body
         success = getattr(body, "success", None)
         if success is False:
             raise RuntimeError(f"Failed to create MaxCompute datasource '{ds_name}': {body}")
-        logger.info(f"MaxCompute datasource '{ds_name}' created successfully.")
+        logger.info(f"MaxCompute datasource '{ds_name}' created.")
 
     # =========================================================================
     # generate_di_job_content
@@ -169,7 +191,6 @@ class DataWorksClient:
         oss_path = f"{base_path}{table['OSS_Object']}"
         file_format = table["FileFormat"]
 
-        # Reader
         reader_param = {
             "path": oss_path,
             "datasource": oss_ds,
@@ -180,7 +201,6 @@ class DataWorksClient:
             reader_param["fieldDelimiter"] = table.get("FieldDelimiter", ",")
             reader_param["encoding"] = table.get("Encoding", "UTF-8")
 
-        # Writer
         writer_param = {
             "truncate": False,
             "datasource": odps_ds,
@@ -252,7 +272,7 @@ class DataWorksClient:
         return json.dumps(spec_dict, ensure_ascii=False)
 
     # =========================================================================
-    # create_node
+    # create_node  ← 已验证：snake_case 正确
     # =========================================================================
     def create_node(self, node_name: str, config: dict, table_idx: int) -> int:
         """调用 CreateNode API，一步创建定时节点"""
@@ -282,14 +302,15 @@ class DataWorksClient:
     def list_resource_groups(self) -> list:
         """列出数据集成资源组"""
         logger.info("Listing Data Integration resource groups ...")
-        for kwargs in [{"ResourceGroupType": 4}, {}]:
+        # resource_group_type=4 → 数据集成资源组
+        for kwargs in [{"resource_group_type": 4}, {}]:
             try:
                 request = dw.ListResourceGroupsRequest(**kwargs)
                 response = self.client.list_resource_groups_with_options(request, self.runtime)
                 groups = (response.body.data or []) if response.body else []
                 for g in groups:
-                    logger.info(f"  Identifier: {g.identifier} | Status: {g.status}")
+                    logger.info(f"  Identifier: {getattr(g, 'identifier', '?')} | Status: {getattr(g, 'status', '?')}")
                 return groups
             except Exception as e:
-                logger.warning(f"ListResourceGroups attempt {kwargs}: {e}")
+                logger.warning(f"ListResourceGroups {kwargs}: {e}")
         return []
