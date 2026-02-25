@@ -1,5 +1,5 @@
 {
-    "ProjectName": "ParquetTest",
+    "ProjectName": "github",
     "Owner": "202997971985675034",
     "OSS": {
         "DataSourceName": "paruqet_user1",
@@ -14,7 +14,7 @@
     },
     "Tables": [
         {
-            "Name": "user1",
+            "Name": "test",
             "OSS_Object": "parquet/*.parquet",
             "FileFormat": "parquet",
             "Partition": "pt"
