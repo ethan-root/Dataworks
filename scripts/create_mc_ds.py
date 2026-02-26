@@ -3,14 +3,16 @@
 create_mc_ds.py
 职责：根据项目下的 maxcompute-datasource.json 创建 MaxCompute(odps) 数据源。
 
-认证方式：InstanceMode —— 不传 AK/SK，由 DataWorks 工作空间绑定的账号权限自动鉴权。
+认证方式：AliyunAccount（阿里云账号及阿里云RAM角色）
+  对应控制台：认证方式=阿里云账号及阿里云RAM角色，所属云账号=当前主账号，Endpoint=自动适配
+  关键点：不传 endpoint / endpointMode，让 DataWorks 自动适配地域 endpoint
 
-历史尝试（均被 API 拒绝，结论：connection_properties 不接受任何凭证字段）：
-  - authType=AliyunAccount          → "不支持该authType"
-  - authType=Ak (无凭证)            → "Ak not allowed"
-  - authType=ACCESS_KEY+accessKeyId → "accessKeyId无法被识别"
-  - authType=ACCESS_KEY+access_key_id → "access_key_id无法被识别"
-  结论：切换 InstanceMode，让工作空间统一接管 MaxCompute 鉴权
+历史失败记录（供排查参考）：
+  - subAccount 字段              → "无法被识别"
+  - authType=AliyunAccount       → 之前同时传了 endpointMode 导致冲突
+  - authType=Ak (无凭证)         → "Ak not allowed"
+  - authType=ACCESS_KEY+凭证字段 → 各种字段名均被拒绝
+  - InstanceMode                 → "odps不支持该ConnectionPropertiesMode"
 """
 
 import argparse
@@ -46,26 +48,26 @@ def main():
         sys.exit(1)
     project_id = int(project_id_str)
 
-    # InstanceMode：不传 AK/SK，DataWorks 通过工作空间绑定账号自动鉴权
-    # 所有显式传入凭证字段的尝试均被 API 拒绝（见模块注释）
+    # 对应控制台手动创建的参数：
+    #   认证方式 = 阿里云账号及阿里云RAM角色
+    #   所属云账号 = 当前阿里云主账号
+    #   Endpoint = 自动适配（不传 endpoint/endpointMode，DataWorks 按 regionId 自动解析）
     connection_properties = {
         "project":  ds_config["project"],
+        "authType": "AliyunAccount",
         "envType":  "Prod",
         "regionId": region,
     }
-    if ds_config.get("endpoint"):
-        connection_properties["endpoint"] = ds_config["endpoint"]
 
     print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
-    print(f"  connection_properties_mode: InstanceMode")
-    print(f"  project: {ds_config['project']}")
+    print(f"  connection_properties: {json.dumps(connection_properties)}")
 
     client = create_client()
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
         name=ds_config["name"],
         type="odps",
-        connection_properties_mode="InstanceMode",  # 工作空间实例模式，无需显式传凭证
+        connection_properties_mode="UrlMode",
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
         description=ds_config.get("description", "")
     )
