@@ -34,13 +34,12 @@ def main():
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
     # DataWorks 标准/基础模式工作空间不允许 authType=Ak（禁止在数据源中存储 AK/SK）。
-    # authType 为必填项，但要使用工作空间自身的 RAM 角色授权，需设置为字符串 "None"。
-    # 此时数据源的访问权限由工作空间绑定的 RAM 角色统一接管，无需传入 accessId/accessKey。
+    # ODPS 数据源不支持 authType=None，使用 "Sts" 表示由工作空间 RAM 角色签发临时凭证。
     connection_properties = {
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
         "endpointMode": ds_config.get("endpointMode", "Public"),  # Public / Inner / VPC
-        "authType": "None",  # 使用工作空间 RAM 角色，不单独注入 AK/SK
+        "authType": "Sts",  # 使用工作空间 RAM 角色的 STS 临时凭证，无需静态 AK/SK
         "envType": "Prod",
         "regionId": region
     }
