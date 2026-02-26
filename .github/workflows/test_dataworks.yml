@@ -11,6 +11,10 @@ on:
         options:
           - create_table
           - create_node
+          - publish_node
+          - clean_mc_tables
+          - create_oss_ds
+          - create_mc_ds
       project_dir:
         description: '项目目录'
         required: false
@@ -47,3 +51,19 @@ jobs:
       - name: Create DataWorks Node
         if: ${{ github.event.inputs.action == 'create_node' }}
         run: python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}
+
+      - name: Publish DataWorks Node
+        if: ${{ github.event.inputs.action == 'publish_node' }}
+        run: python scripts/publish_node.py --project-dir ${{ github.event.inputs.project_dir }}
+
+      - name: Clean MaxCompute Tables (Dry Run by default)
+        if: ${{ github.event.inputs.action == 'clean_mc_tables' }}
+        run: python scripts/clean_mc_tables.py
+
+      - name: Create OSS DataSource
+        if: ${{ github.event.inputs.action == 'create_oss_ds' }}
+        run: python scripts/create_oss_ds.py --project-dir ${{ github.event.inputs.project_dir }}
+
+      - name: Create MaxCompute DataSource
+        if: ${{ github.event.inputs.action == 'create_mc_ds' }}
+        run: python scripts/create_mc_ds.py --project-dir ${{ github.event.inputs.project_dir }}
