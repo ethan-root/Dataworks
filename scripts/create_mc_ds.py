@@ -3,11 +3,14 @@
 create_mc_ds.py
 职责：根据项目下的 maxcompute-datasource.json 创建 MaxCompute(odps) 数据源。
 
-认证方式对应 DataWorks 控制台：
-  认证方式    : 阿里云账号及阿里云RAM角色  → authType = "AliyunAccount"
-  所属云账号  : 当前阿里云主账号           → accountType 字段（不传默认为主账号）
-  默认访问身份: 阿里云RAM子账号            → subAccount 字段
-  Endpoint   : 自动适配                  → 不传 endpoint 或传空字符串
+认证方式：authType = "Ak"，与 OSS 数据源保持一致。
+  accessId / accessKey 从环境变量注入，DataWorks 用这组凭证访问 MaxCompute。
+
+历史尝试（均被 API 拒绝）：
+  - subAccount 字段        → "无法被识别"
+  - authType=AliyunAccount → "当前数据源不支持该authType"
+  - authType=Ak 不带凭证  → "Ak not allowed"
+  结论：必须使用 authType=Ak 并显式传入 accessId/accessKey
 """
 
 import argparse
@@ -19,7 +22,6 @@ from pathlib import Path
 from alibabacloud_dataworks_public20240518 import models as dw_models
 from alibabacloud_tea_util import models as util_models
 
-# 引用之前封装的 SDK 初始化函数
 from dataworks_client import create_client
 
 
@@ -36,22 +38,25 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         ds_config = json.load(f)
 
-    # 从环境变量获取 Region (如 cn-shanghai)
+    # 从环境变量获取 AK/SK（与 OSS 数据源保持一致的认证方式）
+    ak = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+    sk = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+    if not ak or not sk:
+        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
+        sys.exit(1)
+
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
-    # 认证方式：阿里云账号及阿里云RAM角色（对应 UI 中「当前阿里云主账号 + RAM子账号」模式）
-    # authType = "AliyunAccount" 时不需要传入 AK/SK，由工作空间绑定的主账号权限接管。
-    # subAccount 对应 UI 中「阿里云子账号」字段（如 kering-dataworks）。
+    # authType=Ak：显式传入 AK/SK，与 OSS 数据源一致的成功模式
     connection_properties = {
         "project":      ds_config["project"],
-        "authType":     "AliyunAccount",
+        "authType":     "Ak",
+        "accessId":     ak,
+        "accessKey":    sk,
         "envType":      "Prod",
         "regionId":     region,
         "endpointMode": ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
     }
-    # 子账号由工作空间账号绑定关系自动确定，不需要在 connection_properties 中显式传入
-    # if ds_config.get("subAccount"):
-    #     connection_properties["subAccount"] = ds_config["subAccount"]
     # Endpoint（配置文件有则指定，否则由 DataWorks 自动适配）
     if ds_config.get("endpoint"):
         connection_properties["endpoint"] = ds_config["endpoint"]
@@ -63,24 +68,24 @@ def main():
     project_id = int(project_id_str)
 
     print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
-    
+
     client = create_client()
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
         name=ds_config["name"],
-        type="odps",  # DataWorks 里叫 odps
-        connection_properties_mode="UrlMode", # UrlMode 或 InstanceMode
+        type="odps",
+        connection_properties_mode="UrlMode",
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
         description=ds_config.get("description", "")
     )
-    
+
     try:
         resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
         print(f"✅ MaxCompute DataSource Created successfully. ID: {resp.body.id}")
     except Exception as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         print(f"❌ Failed to create DataSource: {msg}")
-        sys.exit(1)  # 数据源创建失败必须终止，否则后续 create_node 因无数据源而静默失败
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
