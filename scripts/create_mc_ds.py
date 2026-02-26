@@ -58,6 +58,7 @@ def main():
         project_id=project_id,
         name=ds_config["name"],
         type="odps",  # DataWorks 里叫 odps
+        env_type="Dev",  # DataWorks 标准模式下需指定是开发(Dev)还是生产(Prod)环境数据源
         connection_properties_mode="UrlMode", # UrlMode 或 InstanceMode
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
         description=ds_config.get("description", "")
