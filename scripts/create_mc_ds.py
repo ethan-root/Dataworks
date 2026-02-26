@@ -37,13 +37,17 @@ def main():
         print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
         sys.exit(1)
 
-    # DataWorks 创建 MaxCompute数据源要求传入 Endpoint, Project 和 AK/SK
+    # 从环境变量获取 Region (如 cn-shanghai)
+    region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
+
+    # DataWorks 创建 MaxCompute数据源要求传入 Endpoint, Project 和 AK/SK 以及 Region等必填信息
     connection_properties = {
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
         "accessId": ak,
         "accessKey": sk,
-        "envType": "Dev"  # 必须指定环境（Dev 或 Prod）
+        "envType": "Dev",  # 必须指定环境（Dev 或 Prod）
+        "regionId": region # DataWorks API 强制要求 regionId
     }
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
