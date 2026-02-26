@@ -43,10 +43,11 @@ def main():
     # authType = "AliyunAccount" 时不需要传入 AK/SK，由工作空间绑定的主账号权限接管。
     # subAccount 对应 UI 中「阿里云子账号」字段（如 kering-dataworks）。
     connection_properties = {
-        "project":     ds_config["project"],
-        "authType":    "AliyunAccount",
-        "envType":     "Prod",
-        "regionId":    region,
+        "project":      ds_config["project"],
+        "authType":     "AliyunAccount",
+        "envType":      "Prod",
+        "regionId":     region,
+        "endpointMode": ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
     }
     # 子账号由工作空间账号绑定关系自动确定，不需要在 connection_properties 中显式传入
     # if ds_config.get("subAccount"):
