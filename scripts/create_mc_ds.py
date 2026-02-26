@@ -51,9 +51,9 @@ def main():
     # "Ak" / "AccessKey" / "AliyunAccount" 均被 API 拒绝
     connection_properties = {
         "project":         ds_config["project"],
-        "authType":        "ACCESS_KEY",
-        "accessKeyId":     ak,
-        "accessKeySecret": sk,
+        "authType":          "ACCESS_KEY",
+        "access_key_id":     ak,      # MaxCompute 用下划线命名，与 OSS 的 accessId 不同
+        "access_key_secret": sk,
         "envType":         "Prod",
         "regionId":        region,
         "endpointMode":    ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
