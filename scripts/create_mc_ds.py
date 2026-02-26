@@ -30,10 +30,19 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         ds_config = json.load(f)
 
-    # DataWorks 创建 MaxCompute 数据源的连接属性
+    # 从环境变量获取 AK/SK 用于数据源鉴权
+    ak = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+    sk = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+    if not ak or not sk:
+        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
+        sys.exit(1)
+
+    # DataWorks 创建 MaxCompute数据源要求传入 Endpoint, Project 和 AK/SK
     connection_properties = {
         "project": ds_config["project"],
-        "endpoint": ds_config["endpoint"]
+        "endpoint": ds_config["endpoint"],
+        "accessId": ak,
+        "accessKey": sk
     }
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
@@ -49,6 +58,7 @@ def main():
         project_id=project_id,
         name=ds_config["name"],
         type="odps",  # DataWorks 里叫 odps
+        connection_properties_mode="UrlMode", # UrlMode 或 InstanceMode
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
         description=ds_config.get("description", "")
     )
