@@ -33,14 +33,16 @@ def main():
     # 从环境变量获取 Region (如 cn-shanghai)
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
-    # DataWorks 标准/基础模式工作空间不允许在数据源中直接存储 AK/SK (authType=Ak is not allowed)。
-    # 正确做法：不传 authType / accessId / accessKey，由工作空间自身的授权身份（RAM角色）接管。
+    # DataWorks 标准/基础模式工作空间不允许 authType=Ak（禁止在数据源中存储 AK/SK）。
+    # authType 为必填项，但要使用工作空间自身的 RAM 角色授权，需设置为字符串 "None"。
+    # 此时数据源的访问权限由工作空间绑定的 RAM 角色统一接管，无需传入 accessId/accessKey。
     connection_properties = {
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
         "endpointMode": ds_config.get("endpointMode", "Public"),  # Public / Inner / VPC
-        "envType": "Prod",   # 基础模式工作空间只支持 Prod 环境
-        "regionId": region   # DataWorks API 强制要求 regionId
+        "authType": "None",  # 使用工作空间 RAM 角色，不单独注入 AK/SK
+        "envType": "Prod",
+        "regionId": region
     }
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
