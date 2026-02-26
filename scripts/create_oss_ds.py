@@ -44,6 +44,7 @@ def main():
     connection_properties = {
         "endpoint": ds_config["endpoint"],
         "bucket": ds_config["bucket"],
+        "authType": "Ak", # Ak 代表使用 AccessKey 认证
         "accessId": ak,
         "accessKey": sk,
         "envType": "Dev",  # 必须指定环境（Dev 或 Prod）

@@ -44,6 +44,7 @@ def main():
     connection_properties = {
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
+        "authType": "2", # 对于 ODPS，通常 2 代表 AK 认证
         "accessId": ak,
         "accessKey": sk,
         "envType": "Dev",  # 必须指定环境（Dev 或 Prod）
