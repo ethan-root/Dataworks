@@ -24,10 +24,10 @@ def process_project(client, project_id: int, project_dir: str) -> None:
         client:      DataWorks SDK 客户端（由 deploy.py 传入）
         project_id:  DataWorks 工作空间 ID
         project_dir: 项目目录路径，如 "projects/Test"
-                     该目录下必须有 config.json 文件
+                     该目录下必须有 task-config.json 文件
     """
     # ── 第一步：读取项目配置 ───────────────────────────────────
-    config_path = Path(project_dir) / "config.json"
+    config_path = Path(project_dir) / "task-config.json"
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 

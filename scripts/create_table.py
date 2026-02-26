@@ -36,7 +36,7 @@ def main():
     parser = argparse.ArgumentParser(description="Create MaxCompute table from create-table.sql")
     parser.add_argument(
         "--project-dir", type=str, default="projects/Test",
-        help="项目目录路径，该目录下必须有 create-table.sql 文件"
+        help="项目目录路径，该目录下必须有 create-table.sql 文件（task-config.json 同目录）"
     )
     args = parser.parse_args()
 

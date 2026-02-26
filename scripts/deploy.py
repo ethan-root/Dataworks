@@ -61,7 +61,7 @@ def main():
         projects_path = Path(args.projects_dir)
         project_dirs = sorted(
             d for d in projects_path.iterdir()
-            if d.is_dir() and (d / "config.json").exists()   # 只处理有 config.json 的目录
+            if d.is_dir() and (d / "task-config.json").exists()   # 只处理有 task-config.json 的目录
         )
         if not project_dirs:
             print(f"No projects found in {projects_path}")
