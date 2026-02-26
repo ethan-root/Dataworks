@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS github_test (
+CREATE TABLE IF NOT EXISTS prod_github_test (
     `col1`  STRING          COMMENT '*',
     `col2`  STRING          COMMENT '*',
     `col3`  DECIMAL(38,18)  COMMENT '*',
