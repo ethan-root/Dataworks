@@ -1,5 +1,5 @@
 {
-    "name": "mc_script_datasource",
+    "name": "prod_mc_script_datasource",
     "project": "maxcompute_parquet_test",
     "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api",
     "subAccount": "kering-dataworks",
