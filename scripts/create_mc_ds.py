@@ -47,15 +47,16 @@ def main():
 
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
-    # authType=Ak：显式传入 AK/SK，与 OSS 数据源一致的成功模式
+    # authType=ACCESS_KEY：DataWorks API 要求全大写，区分大小写
+    # "Ak" / "AccessKey" / "AliyunAccount" 均被 API 拒绝
     connection_properties = {
-        "project":      ds_config["project"],
-        "authType":     "Ak",
-        "accessId":     ak,
-        "accessKey":    sk,
-        "envType":      "Prod",
-        "regionId":     region,
-        "endpointMode": ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
+        "project":         ds_config["project"],
+        "authType":        "ACCESS_KEY",
+        "accessKeyId":     ak,
+        "accessKeySecret": sk,
+        "envType":         "Prod",
+        "regionId":        region,
+        "endpointMode":    ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
     }
     # Endpoint（配置文件有则指定，否则由 DataWorks 自动适配）
     if ds_config.get("endpoint"):
