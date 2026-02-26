@@ -50,13 +50,14 @@ def main():
 
     # 对应控制台手动创建的参数：
     #   认证方式 = 阿里云账号及阿里云RAM角色
-    #   所属云账号 = 当前阿里云主账号
-    #   Endpoint = 自动适配（不传 endpoint/endpointMode，DataWorks 按 regionId 自动解析）
+    #   Endpoint = 自动适配 → endpointMode="automatic"（不传显式 endpoint）
+    #   注意：endpointMode是必填项，"public"会导致authType冲突，不传会报null错误
     connection_properties = {
-        "project":  ds_config["project"],
-        "authType": "AliyunAccount",
-        "envType":  "Prod",
-        "regionId": region,
+        "project":      ds_config["project"],
+        "authType":     "AliyunAccount",
+        "envType":      "Prod",
+        "regionId":     region,
+        "endpointMode": "automatic",  # 自动适配（区别于 "public" / "vpc" 自定义配置）
     }
 
     print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
