@@ -51,7 +51,7 @@ def main():
         "project": ds_config["project"],
         "envType": "Prod",
         "regionId": region,
-        "endpointMode": "automatic"
+        "endpointMode": "SelfAdaption"  # 控制台界面的“自动适配”
     }
     
     # 根据官方论坛和工单经验，跨账号才需要复杂的 authType (如 RamRole)。
