@@ -12,42 +12,5 @@
         "datasource": "maxcompute_user1",
         "table": "test",
         "partition": "pt='${bizdate}'"
-    },
-    "odps_table": {
-        "comment": "null",
-        "lifecycle": 36500,
-        "columns": [
-            {
-                "name": "col1",
-                "type": "STRING",
-                "comment": "*"
-            },
-            {
-                "name": "col2",
-                "type": "STRING",
-                "comment": "*"
-            },
-            {
-                "name": "col3",
-                "type": "DECIMAL(38,18)",
-                "comment": "*"
-            },
-            {
-                "name": "col4",
-                "type": "TIMESTAMP",
-                "comment": "*"
-            },
-            {
-                "name": "col5",
-                "type": "BIGINT",
-                "comment": "*"
-            },
-            {
-                "name": "col6",
-                "type": "DECIMAL(38,18)",
-                "comment": "*"
-            }
-        ],
-        "partition": "pt STRING"
     }
 }
