@@ -47,7 +47,7 @@ def main():
         "authType": "Ak", # Ak 代表使用 AccessKey 认证
         "accessId": ak,
         "accessKey": sk,
-        "envType": "Dev",  # 必须指定环境（Dev 或 Prod）
+        "envType": "Prod",  # 基础模式工作空间只支持 Prod 环境
         "regionId": region # DataWorks API 强制要求 regionId
     }
 
