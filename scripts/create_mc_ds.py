@@ -3,14 +3,14 @@
 create_mc_ds.py
 职责：根据项目下的 maxcompute-datasource.json 创建 MaxCompute(odps) 数据源。
 
-认证方式：authType = "Ak"，与 OSS 数据源保持一致。
-  accessId / accessKey 从环境变量注入，DataWorks 用这组凭证访问 MaxCompute。
+认证方式：InstanceMode —— 不传 AK/SK，由 DataWorks 工作空间绑定的账号权限自动鉴权。
 
-历史尝试（均被 API 拒绝）：
-  - subAccount 字段        → "无法被识别"
-  - authType=AliyunAccount → "当前数据源不支持该authType"
-  - authType=Ak 不带凭证  → "Ak not allowed"
-  结论：必须使用 authType=Ak 并显式传入 accessId/accessKey
+历史尝试（均被 API 拒绝，结论：connection_properties 不接受任何凭证字段）：
+  - authType=AliyunAccount          → "不支持该authType"
+  - authType=Ak (无凭证)            → "Ak not allowed"
+  - authType=ACCESS_KEY+accessKeyId → "accessKeyId无法被识别"
+  - authType=ACCESS_KEY+access_key_id → "access_key_id无法被识别"
+  结论：切换 InstanceMode，让工作空间统一接管 MaxCompute 鉴权
 """
 
 import argparse
@@ -38,29 +38,7 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         ds_config = json.load(f)
 
-    # 从环境变量获取 AK/SK（与 OSS 数据源保持一致的认证方式）
-    ak = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
-    sk = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
-    if not ak or not sk:
-        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
-        sys.exit(1)
-
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
-
-    # authType=ACCESS_KEY：DataWorks API 要求全大写，区分大小写
-    # "Ak" / "AccessKey" / "AliyunAccount" 均被 API 拒绝
-    connection_properties = {
-        "project":         ds_config["project"],
-        "authType":          "ACCESS_KEY",
-        "access_key_id":     ak,      # MaxCompute 用下划线命名，与 OSS 的 accessId 不同
-        "access_key_secret": sk,
-        "envType":         "Prod",
-        "regionId":        region,
-        "endpointMode":    ds_config.get("endpointMode", "public"),  # 必填：public / vpc / intranet
-    }
-    # Endpoint（配置文件有则指定，否则由 DataWorks 自动适配）
-    if ds_config.get("endpoint"):
-        connection_properties["endpoint"] = ds_config["endpoint"]
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
     if not project_id_str:
@@ -68,14 +46,26 @@ def main():
         sys.exit(1)
     project_id = int(project_id_str)
 
+    # InstanceMode：不传 AK/SK，DataWorks 通过工作空间绑定账号自动鉴权
+    # 所有显式传入凭证字段的尝试均被 API 拒绝（见模块注释）
+    connection_properties = {
+        "project":  ds_config["project"],
+        "envType":  "Prod",
+        "regionId": region,
+    }
+    if ds_config.get("endpoint"):
+        connection_properties["endpoint"] = ds_config["endpoint"]
+
     print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
+    print(f"  connection_properties_mode: InstanceMode")
+    print(f"  project: {ds_config['project']}")
 
     client = create_client()
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
         name=ds_config["name"],
         type="odps",
-        connection_properties_mode="UrlMode",
+        connection_properties_mode="InstanceMode",  # 工作空间实例模式，无需显式传凭证
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
         description=ds_config.get("description", "")
     )
