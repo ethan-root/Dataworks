@@ -2,6 +2,7 @@
     "node_name": "github_test",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
+    "cu": 0.5,
     "cron": "00 00 02 * * ?",
     "reader": {
         "datasource": "paruqet_user1",

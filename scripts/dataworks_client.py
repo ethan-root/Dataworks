@@ -149,7 +149,11 @@ def build_spec(config: dict) -> str:
                         "endTime":   "9999-01-01 00:00:00"          # 永不过期
                     },
 
-                    "runtimeResource": {"resourceGroup": resource_group},  # 运行时使用的资源组
+                    "runtimeResource": {
+                        "resourceGroup": resource_group,  # Serverless 资源组标识符
+                        "cu": config.get("cu", 0.5)       # 调度 CU 数（Serverless 资源组必须设置）
+                    },
+
                     "name":  node_name,
                     "owner": config["owner"]    # 负责人 UID（DataWorks 账号 ID）
                 }
