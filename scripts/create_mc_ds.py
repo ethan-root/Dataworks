@@ -7,6 +7,7 @@ create_mc_ds.py
 import argparse
 import json
 import sys
+import os
 from pathlib import Path
 
 from alibabacloud_dataworks_public20240518 import models as dw_models
@@ -35,10 +36,17 @@ def main():
         "endpoint": ds_config["endpoint"]
     }
 
-    print(f"Creating MaxCompute DataSource '{ds_config['name']}' ...")
+    project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
+    if not project_id_str:
+        print("ERROR: DATAWORKS_PROJECT_ID not set")
+        sys.exit(1)
+    project_id = int(project_id_str)
+
+    print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
     
     client = create_client()
     request = dw_models.CreateDataSourceRequest(
+        project_id=project_id,
         name=ds_config["name"],
         type="odps",  # DataWorks 里叫 odps
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
