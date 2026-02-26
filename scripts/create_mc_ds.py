@@ -50,7 +50,8 @@ def main():
     connection_properties = {
         "project": ds_config["project"],
         "envType": "Prod",
-        "regionId": region
+        "regionId": region,
+        "endpointMode": "automatic"
     }
     
     # 根据官方论坛和工单经验，跨账号才需要复杂的 authType (如 RamRole)。
