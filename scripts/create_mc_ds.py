@@ -2,6 +2,12 @@
 """
 create_mc_ds.py
 职责：根据项目下的 maxcompute-datasource.json 创建 MaxCompute(odps) 数据源。
+
+认证方式对应 DataWorks 控制台：
+  认证方式    : 阿里云账号及阿里云RAM角色  → authType = "AliyunAccount"
+  所属云账号  : 当前阿里云主账号           → accountType 字段（不传默认为主账号）
+  默认访问身份: 阿里云RAM子账号            → subAccount 字段
+  Endpoint   : 自动适配                  → 不传 endpoint 或传空字符串
 """
 
 import argparse
@@ -33,16 +39,21 @@ def main():
     # 从环境变量获取 Region (如 cn-shanghai)
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
-    # DataWorks 标准/基础模式工作空间不允许 authType=Ak（禁止在数据源中存储 AK/SK）。
-    # ODPS 数据源不支持 authType=None，使用 "Sts" 表示由工作空间 RAM 角色签发临时凭证。
+    # 认证方式：阿里云账号及阿里云RAM角色（对应 UI 中「当前阿里云主账号 + RAM子账号」模式）
+    # authType = "AliyunAccount" 时不需要传入 AK/SK，由工作空间绑定的主账号权限接管。
+    # subAccount 对应 UI 中「阿里云子账号」字段（如 kering-dataworks）。
     connection_properties = {
-        "project": ds_config["project"],
-        "endpoint": ds_config["endpoint"],
-        "endpointMode": ds_config.get("endpointMode", "Public"),  # Public / Inner / VPC
-        "authType": "Sts",  # 使用工作空间 RAM 角色的 STS 临时凭证，无需静态 AK/SK
-        "envType": "Prod",
-        "regionId": region
+        "project":     ds_config["project"],
+        "authType":    "AliyunAccount",
+        "envType":     "Prod",
+        "regionId":    region,
     }
+    # 子账号（可选，配置文件中有则填入）
+    if ds_config.get("subAccount"):
+        connection_properties["subAccount"] = ds_config["subAccount"]
+    # Endpoint（配置文件有则指定，否则由 DataWorks 自动适配）
+    if ds_config.get("endpoint"):
+        connection_properties["endpoint"] = ds_config["endpoint"]
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
     if not project_id_str:

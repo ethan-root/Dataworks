@@ -2,5 +2,6 @@
     "name": "mc_script_datasource",
     "project": "maxcompute_parquet_test",
     "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api",
+    "subAccount": "kering-dataworks",
     "description": "MaxCompute datasource auto-created via script"
 }
