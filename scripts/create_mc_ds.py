@@ -45,7 +45,7 @@ def main():
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
         "endpointMode": "Public", # ODPS 必填，Public(公网), Inner(经典网络), VPC(专有网络)
-        "authType": "2", # 对于 ODPS，通常 2 代表 AK 认证
+        "authType": "Ak", # Ak 代表使用 AccessKey 认证
         "accessId": ak,
         "accessKey": sk,
         "envType": "Prod",  # 基础模式工作空间只支持 Prod 环境
