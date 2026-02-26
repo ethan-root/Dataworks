@@ -1,0 +1,56 @@
+# -*- coding: utf-8 -*-
+"""
+create_oss_ds.py
+职责：根据项目下的 oss-datasource.json 创建 OSS 数据源。
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from alibabacloud_dataworks_public20240518 import models as dw_models
+from alibabacloud_tea_util import models as util_models
+
+# 引用之前封装的 SDK 初始化函数
+from dataworks_client import create_client
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Create OSS DataSource")
+    parser.add_argument("--project-dir", type=str, default="projects/Test", help="项目目录路径")
+    args = parser.parse_args()
+
+    config_path = Path(args.project_dir) / "oss-datasource.json"
+    if not config_path.exists():
+        print(f"ERROR: {config_path} not found.")
+        sys.exit(1)
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        ds_config = json.load(f)
+
+    # DataWorks 创建数据源要求特定格式的 connectionProperties JSON 字符串
+    connection_properties = {
+        "endpoint": ds_config["endpoint"],
+        "bucket": ds_config["bucket"]
+    }
+
+    print(f"Creating OSS DataSource '{ds_config['name']}' ...")
+    
+    client = create_client()
+    request = dw_models.CreateDataSourceRequest(
+        name=ds_config["name"],
+        type="oss",  # 数据源类型标识
+        connection_properties=json.dumps(connection_properties, ensure_ascii=False),
+        description=ds_config.get("description", "")
+    )
+    
+    try:
+        resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
+        print(f"✅ OSS DataSource Created successfully. ID: {resp.body.id}")
+    except Exception as e:
+        print(f"Failed to create DataSource: {e.message if hasattr(e, 'message') else str(e)}")
+        # 注: 如果数据源已存在，API 通常会抛错，此处不终止运行。
+
+if __name__ == "__main__":
+    main()

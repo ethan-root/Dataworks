@@ -1,0 +1,6 @@
+{
+    "name": "mc_script_datasource",
+    "project": "maxcompute_parquet_test",
+    "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api",
+    "description": "MaxCompute datasource auto-created via script"
+}
