@@ -48,9 +48,9 @@ def main():
         "envType":     "Prod",
         "regionId":    region,
     }
-    # 子账号（可选，配置文件中有则填入）
-    if ds_config.get("subAccount"):
-        connection_properties["subAccount"] = ds_config["subAccount"]
+    # 子账号由工作空间账号绑定关系自动确定，不需要在 connection_properties 中显式传入
+    # if ds_config.get("subAccount"):
+    #     connection_properties["subAccount"] = ds_config["subAccount"]
     # Endpoint（配置文件有则指定，否则由 DataWorks 自动适配）
     if ds_config.get("endpoint"):
         connection_properties["endpoint"] = ds_config["endpoint"]
