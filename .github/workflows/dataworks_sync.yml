@@ -12,7 +12,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'projects/**/config.json'
+      - 'projects/**/task-config.json'
 
 env:
   DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}

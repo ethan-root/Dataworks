@@ -30,26 +30,17 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         ds_config = json.load(f)
 
-    # 从环境变量获取 AK/SK 用于数据源鉴权
-    ak = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
-    sk = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
-    if not ak or not sk:
-        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
-        sys.exit(1)
-
     # 从环境变量获取 Region (如 cn-shanghai)
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
 
-    # DataWorks 创建 MaxCompute数据源要求传入 Endpoint, Project 和 AK/SK 以及 Region等必填信息
+    # DataWorks 标准/基础模式工作空间不允许在数据源中直接存储 AK/SK (authType=Ak is not allowed)。
+    # 正确做法：不传 authType / accessId / accessKey，由工作空间自身的授权身份（RAM角色）接管。
     connection_properties = {
         "project": ds_config["project"],
         "endpoint": ds_config["endpoint"],
-        "endpointMode": "Public", # ODPS 必填，Public(公网), Inner(经典网络), VPC(专有网络)
-        "authType": "Ak", # Ak 代表使用 AccessKey 认证
-        "accessId": ak,
-        "accessKey": sk,
-        "envType": "Prod",  # 基础模式工作空间只支持 Prod 环境
-        "regionId": region # DataWorks API 强制要求 regionId
+        "endpointMode": ds_config.get("endpointMode", "Public"),  # Public / Inner / VPC
+        "envType": "Prod",   # 基础模式工作空间只支持 Prod 环境
+        "regionId": region   # DataWorks API 强制要求 regionId
     }
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
@@ -74,7 +65,9 @@ def main():
         resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
         print(f"✅ MaxCompute DataSource Created successfully. ID: {resp.body.id}")
     except Exception as e:
-        print(f"Failed to create DataSource: {e.message if hasattr(e, 'message') else str(e)}")
+        msg = e.message if hasattr(e, 'message') else str(e)
+        print(f"❌ Failed to create DataSource: {msg}")
+        sys.exit(1)  # 数据源创建失败必须终止，否则后续 create_node 因无数据源而静默失败
 
 if __name__ == "__main__":
     main()

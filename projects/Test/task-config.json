@@ -5,7 +5,7 @@
     "cu": 0.5,
     "cron": "00 00 02 * * ?",
     "reader": {
-        "datasource": "paruqet_user1",
+        "datasource": "parquet_user1",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet"
     },
