@@ -1,16 +1,16 @@
 {
-    "node_name": "prod_github_test_3",
+    "node_name": "sync_test_2",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
     "cu": 0.5,
-    "cron": "00 00 02 * * ?",
+    "cron": "00 10 00-23/1 * * ?",
     "reader": {
-        "datasource": "parquet_user1",
+        "datasource": "oss_test_2",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet"
     },
     "writer": {
-        "datasource": "maxcompute_user1",
+        "datasource": "mc_test_2",
         "table": "test",
         "partition": "pt='${bizdate}'"
     }
