@@ -1,5 +1,5 @@
 {
-    "node_name": "sync_d_test",
+    "node_name": "sync_demo",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
     "resourceGroupId": "1000015000128",
@@ -11,7 +11,7 @@
     "timezone": "Asia/Shanghai",
     "instanceMode": "Immediately",
     "reader": {
-        "datasource": "oss_d_test",
+        "datasource": "oss_demo",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet",
         "envType": 1,
@@ -40,8 +40,8 @@
         ]
     },
     "writer": {
-        "datasource": "mc_d_test",
-        "table": "feature_d_test",
+        "datasource": "mc_demo",
+        "table": "feature_demo",
         "partition": "pt='${bizdate}'",
         "envType": 1,
         "isSupportThreeModel": false,
