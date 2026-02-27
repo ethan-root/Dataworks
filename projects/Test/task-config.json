@@ -1,5 +1,5 @@
 {
-    "node_name": "sync_test_5",
+    "node_name": "sync_test_7",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
     "resourceGroupId": "1000015000128",
@@ -45,7 +45,12 @@
         "partition": "pt='${bizdate}'",
         "envType": 1,
         "isSupportThreeModel": false,
-        "tunnelQuota": "default"
+        "tunnelQuota": "default",
+        "column": [
+            "name",
+            "age",
+            "location"
+        ]
     },
     "parameters": [
         {
