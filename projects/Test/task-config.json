@@ -107,7 +107,7 @@
             "value": "$bizdate"
         }
     ],
-    "depends": [
+    "_depends": [
         {
             "type": "Normal",
             "output": "7959020649548140528",
