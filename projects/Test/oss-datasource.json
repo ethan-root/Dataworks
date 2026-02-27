@@ -1,5 +1,5 @@
 {
-    "name": "oss_test_2",
+    "name": "oss_d_test",
     "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
     "bucket": "parquet-test1",
     "description": "OSS datasource auto-created via script"

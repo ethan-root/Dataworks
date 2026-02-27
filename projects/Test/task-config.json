@@ -1,17 +1,17 @@
 {
-    "node_name": "sync_test_7",
+    "node_name": "sync_d_test",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
     "resourceGroupId": "1000015000128",
     "resourceGroupName": "dataworks_default_resource_group",
     "cu": 0.5,
     "script_cu": "0.25",
-    "cron": "00 10 00-23/1 * * ?",
+    "cron": "00 30 17 * * ?",
     "cycleType": "NotDaily",
     "timezone": "Asia/Shanghai",
     "instanceMode": "Immediately",
     "reader": {
-        "datasource": "oss_test_2",
+        "datasource": "oss_d_test",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet",
         "envType": 1,
@@ -40,8 +40,8 @@
         ]
     },
     "writer": {
-        "datasource": "mc_test_2",
-        "table": "feature_test_2",
+        "datasource": "mc_d_test",
+        "table": "feature_d_test",
         "partition": "pt='${bizdate}'",
         "envType": 1,
         "isSupportThreeModel": false,

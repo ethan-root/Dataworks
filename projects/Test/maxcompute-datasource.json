@@ -1,5 +1,5 @@
 {
-    "name": "mc_test_2",
+    "name": "mc_d_test",
     "project": "maxcompute_parquet_test",
     "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api",
     "subAccount": "kering-dataworks",
