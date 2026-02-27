@@ -13,7 +13,31 @@
     "reader": {
         "datasource": "oss_test_2",
         "path": "parquet/*.parquet",
-        "fileFormat": "parquet"
+        "fileFormat": "parquet",
+        "envType": 1,
+        "column": [
+            {
+                "originalType": "UTF8",
+                "name": "name",
+                "index": 0,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "originalType": "UTF8",
+                "name": "age",
+                "index": 1,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "originalType": "UTF8",
+                "name": "location",
+                "index": 2,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            }
+        ]
     },
     "writer": {
         "datasource": "mc_test_2",
