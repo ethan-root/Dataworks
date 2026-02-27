@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS github_test_2(
+CREATE TABLE IF NOT EXISTS feature_test_2(
 `name`                          STRING COMMENT '',
 `age`                           STRING COMMENT '',
 `location`                      STRING COMMENT ''
