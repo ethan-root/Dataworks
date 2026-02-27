@@ -71,94 +71,125 @@ def build_spec(config: dict) -> str:
     Returns:
         spec_json: JSON 字符串，直接传给 CreateNodeRequest.spec
     """
-    resource_group = config["resource_group"]   # 调度资源组标识符
+    resource_group = config.get("resource_group", "")
 
     # ── 内层：数据集成任务配置（di_job_content）──────────────────
-    # 这部分告诉 DataWorks 数据从哪个 OSS 路径读、写到哪个 MaxCompute 表
     di_job_content = {
         "extend": {
-            "mode": "wizard",               # 向导模式（固定值）
-            "resourceGroup": resource_group  # 数据集成使用的资源组
+            "mode": "wizard",
+            "resourceGroup": resource_group,
+            "oneStopPageNum": config.get("oneStopPageNum", 2),
+            "cu": config.get("cu", 0.5)
         },
+        "transform": config.get("transform", False),
         "type": "job",
         "version": "2.0",
         "steps": [
             {
-                # === Reader：从 OSS 读取 Parquet 文件 ===
                 "stepType": "oss",
+                "copies": 1,
                 "parameter": {
-                    "path":       config["reader"]["path"],        # OSS 文件路径（支持通配符）
-                    "datasource": config["reader"]["datasource"],  # DataWorks 中配置的数据源名称
-                    "column":     [],                              # [] 表示自动推断所有列
-                    "fileFormat": config["reader"]["fileFormat"]   # 文件格式（parquet/csv 等）
+                    "path":       config.get("reader", {}).get("path", ""),
+                    "envType":    config.get("reader", {}).get("envType", 1),
+                    "datasource": config.get("reader", {}).get("datasource", ""),
+                    "column":     config.get("reader", {}).get("column", []),
+                    "fileFormat": config.get("reader", {}).get("fileFormat", "parquet")
                 },
                 "name": "Reader",
                 "category": "reader"
             },
             {
-                # === Writer：写入 MaxCompute 表 ===
                 "stepType": "odps",
+                "copies": 1,
                 "parameter": {
-                    "partition":         config["writer"]["partition"],  # 分区，${bizdate} 是 DataWorks 调度日期变量
-                    "truncate":          False,           # 不清空历史数据，追加写入
-                    "datasource":        config["writer"]["datasource"],
-                    "column":            [],              # [] 表示自动与目标表列对齐
-                    "emptyAsNull":       False,           # 空字符串不转为 NULL
-                    "table":             config["writer"]["table"],
-                    "consistencyCommit": True             # 使用事务提交，保证写入一致性
+                    "partition":         config.get("writer", {}).get("partition", ""),
+                    "truncate":          config.get("writer", {}).get("truncate", False),
+                    "envType":           config.get("writer", {}).get("envType", 1),
+                    "datasource":        config.get("writer", {}).get("datasource", ""),
+                    "isSupportThreeModel": config.get("writer", {}).get("isSupportThreeModel", False),
+                    "tunnelQuota":       config.get("writer", {}).get("tunnelQuota", "default"),
+                    "column":            config.get("writer", {}).get("column", []),
+                    "emptyAsNull":       config.get("writer", {}).get("emptyAsNull", False),
+                    "tableComment":      config.get("writer", {}).get("tableComment", "null"),
+                    "consistencyCommit": config.get("writer", {}).get("consistencyCommit", True),
+                    "table":             config.get("writer", {}).get("table", "")
                 },
                 "name": "Writer",
                 "category": "writer"
             }
         ],
+        "order": {
+            "hops": config.get("hops", [])
+        },
         "setting": {
-            "errorLimit": {"record": "0"},           # 允许错误行数为 0（遇错即停）
-            "speed": {"throttle": False, "concurrent": 1}  # 不限速，单并发
+            "errorLimit": {"record": "0"},
+            "locale": "zh_CN",
+            "speed": {"throttle": False, "concurrent": 1}
         }
     }
 
     # ── 外层：DataWorks 节点调度配置（spec_dict）──────────────────
-    # 这部分告诉 DataWorks 节点的名字、定时规则、重跑策略等
-    node_name = config["node_name"]
+    node_name = config.get("node_name", "")
+    
+    script_content = {
+        "path": node_name,
+        "language": "json",
+        "runtime": {
+            "command": "DI",
+            "commandTypeId": config.get("script_commandTypeId", 23),
+            "cu": str(config.get("script_cu", "0.25"))
+        },
+        "content": json.dumps(di_job_content, ensure_ascii=False)
+    }
+    
+    if "parameters" in config:
+        script_content["parameters"] = config["parameters"]
+
+    trigger_config = {
+        "type": "Scheduler",
+        "cron": config.get("cron", "00 00 00-23/1 * * ?"),
+        "startTime": config.get("startTime", "1970-01-01 00:00:00"),
+        "endTime": config.get("endTime", "9999-01-01 00:00:00"),
+        "timezone": config.get("timezone", "Asia/Shanghai"),
+        "delaySeconds": config.get("delaySeconds", 0)
+    }
+    if "cycleType" in config:
+        trigger_config["cycleType"] = config["cycleType"]
+
+    runtime_resource = {
+        "resourceGroup": resource_group
+    }
+    if "resourceGroupId" in config:
+        runtime_resource["resourceGroupId"] = config["resourceGroupId"]
+    if "resourceGroupName" in config:
+        runtime_resource["resourceGroupName"] = config["resourceGroupName"]
+
+    node_def = {
+        "recurrence": "Normal",
+        "maxInternalConcurrency": config.get("maxInternalConcurrency", 0),
+        "timeout": config.get("timeout", 0),
+        "timeoutUnit": config.get("timeoutUnit", "HOURS"),
+        "instanceMode": config.get("instanceMode", "Immediately"),
+        "rerunMode": config.get("rerunMode", "Allowed"),
+        "rerunTimes": config.get("rerunTimes", 0),
+        "rerunInterval": config.get("rerunInterval", 180000),
+        "autoParse": config.get("autoParse", False),
+        "script": script_content,
+        "trigger": trigger_config,
+        "runtimeResource": runtime_resource,
+        "name": node_name,
+        "owner": config.get("owner", "")
+    }
+    
+    if "metadata" in config:
+        node_def["metadata"] = config["metadata"]
+
     spec_dict = {
         "version": "1.1.0",
-        "kind": "CycleWorkflow",   # 周期调度类型（定时循环运行）
+        "kind": "CycleWorkflow",
         "spec": {
-            "nodes": [
-                {
-                    "recurrence":    "Normal",   # 正常调度（不暂停、不跳过）
-                    "timeout":        0,          # 超时时间 0 = 不限制
-                    "instanceMode": "T+1",        # T+1 模式：昨天的数据今天跑
-                    "rerunMode":    "Allowed",    # 允许手动重跑
-                    "rerunTimes":    0,           # 失败自动重试次数：0 = 不重试
-                    "rerunInterval": 180000,      # 重试间隔（毫秒）= 3 分钟
-
-                    # 脚本内容：语言为 json，运行时命令为 DI（数据集成）
-                    "script": {
-                        "path":     node_name,                                       # 节点在 DataWorks 中的路径
-                        "language": "json",
-                        "runtime":  {"command": "DI"},                               # DI = Data Integration
-                        "content":  json.dumps(di_job_content, ensure_ascii=False)   # 内层 JSON 作为字符串嵌入
-                    },
-
-                    # 定时触发配置
-                    "trigger": {
-                        "type":      "Scheduler",
-                        "cron":       config["cron"],               # Cron 表达式（如每天凌晨2点）
-                        "startTime": "1970-01-01 00:00:00",         # 从 Unix 纪元开始，即立刻生效
-                        "endTime":   "9999-01-01 00:00:00"          # 永不过期
-                    },
-
-                    "runtimeResource": {
-                        "resourceGroup": resource_group,  # Serverless 资源组标识符
-                        "cu": config.get("cu", 0.5)       # 调度 CU 数（Serverless 资源组必须设置）
-                    },
-
-                    "name":  node_name,
-                    "owner": config["owner"]    # 负责人 UID（DataWorks 账号 ID）
-                }
-            ],
-            "flow": []   # 节点间依赖关系，当前只有一个节点，所以为空
+            "nodes": [node_def],
+            "flow": [{"depends": config.get("depends", [])}] if config.get("depends") else []
         }
     }
 

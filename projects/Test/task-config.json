@@ -2,16 +2,129 @@
     "node_name": "sync_test_2",
     "owner": "202997971985675034",
     "resource_group": "Serverless_res_group_771480527024737_771948044034785",
+    "resourceGroupId": "1000015000128",
+    "resourceGroupName": "dataworks_default_resource_group",
     "cu": 0.5,
+    "script_cu": "0.25",
     "cron": "00 10 00-23/1 * * ?",
+    "cycleType": "NotDaily",
+    "timezone": "Asia/Shanghai",
+    "instanceMode": "Immediately",
     "reader": {
         "datasource": "oss_test_2",
         "path": "parquet/*.parquet",
-        "fileFormat": "parquet"
+        "fileFormat": "parquet",
+        "envType": 1,
+        "column": [
+            {
+                "originalType": "UTF8",
+                "name": "brand_code",
+                "index": 0,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "originalType": "UTF8",
+                "name": "brand_sk",
+                "index": 1,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "originalType": "UTF8",
+                "name": "brand_desc",
+                "index": 2,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "originalType": "UTF8",
+                "name": "brand_short_desc",
+                "index": 3,
+                "repetition": "OPTIONAL",
+                "type": "BINARY"
+            },
+            {
+                "name": "active_flag",
+                "index": 4,
+                "repetition": "OPTIONAL",
+                "type": "BOOLEAN"
+            },
+            {
+                "name": "__delete_flag",
+                "index": 5,
+                "repetition": "OPTIONAL",
+                "type": "BOOLEAN"
+            },
+            {
+                "originalType": "TIMESTAMP_MICROS",
+                "name": "__insert_tstamp",
+                "index": 6,
+                "repetition": "OPTIONAL",
+                "type": "INT64"
+            },
+            {
+                "originalType": "TIMESTAMP_MICROS",
+                "name": "__update_tstamp",
+                "index": 7,
+                "repetition": "OPTIONAL",
+                "type": "INT64"
+            },
+            {
+                "name": "__session_id",
+                "index": 8,
+                "repetition": "OPTIONAL",
+                "type": "INT64"
+            }
+        ]
     },
     "writer": {
         "datasource": "mc_test_2",
         "table": "feature_test_2",
-        "partition": "pt='${bizdate}'"
+        "partition": "pt='${bizdate}'",
+        "envType": 1,
+        "isSupportThreeModel": false,
+        "tunnelQuota": "default",
+        "tableComment": "null",
+        "column": [
+            "brand_code",
+            "brand_sk",
+            "brand_desc",
+            "brand_short_desc",
+            "active_flag",
+            "col5",
+            "col6",
+            "col7",
+            "col8"
+        ]
+    },
+    "parameters": [
+        {
+            "artifactType": "Variable",
+            "name": "bizdate",
+            "scope": "NodeParameter",
+            "type": "System",
+            "value": "$bizdate"
+        }
+    ],
+    "depends": [
+        {
+            "type": "Normal",
+            "output": "7959020649548140528",
+            "sourceType": "Manual",
+            "refTableName": "shangyou_node"
+        }
+    ],
+    "metadata": {
+        "createTime": "2026-02-13 18:08:48",
+        "owner": "202997971985675034",
+        "ownerName": "202997971985675034",
+        "project": {
+            "projectIdentifier": "kering_batch_data_dataworks",
+            "projectName": "kering_batch_data_dataworks_workspace",
+            "projectId": "1184689"
+        },
+        "projectId": "1184689",
+        "tenantId": "771480527024737"
     }
 }
