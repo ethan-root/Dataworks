@@ -11,7 +11,7 @@
     },
     "writer": {
         "datasource": "mc_test_2",
-        "table": "test",
+        "table": "feature_test_2",
         "partition": "pt='${bizdate}'"
     }
 }
