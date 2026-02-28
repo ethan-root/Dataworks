@@ -3,10 +3,12 @@
 dataworks_client.py
 职责：封装阿里云 DataWorks API 的调用逻辑。
 
-对外提供三个函数：
+对外提供五个函数：
   - create_client()  : 初始化 DataWorks SDK 客户端
-  - build_spec()     : 把 config.json 的配置转换成 DataWorks 节点所需的 JSON 格式
+  - build_spec()     : 把 task-config.json 的配置转换成 DataWorks 节点所需的 JSON 格式
   - create_node()    : 调用 DataWorks API 创建定时同步节点
+  - get_node_id()    : 通过节点名精确查找节点，返回 (file_id, node_id)
+  - update_node()    : 调用 DataWorks API 增量更新已有节点
 """
 
 import json
@@ -230,3 +232,198 @@ def create_node(client: DataWorksPublicClient, config: dict, project_id: int) ->
         print(error.message)
         print(error.data.get("Recommend"))
         raise   # 向上抛出，让 GitHub Actions 看到失败
+
+
+# ─────────────────────────────────────────────────────
+# 函数四：通过节点名精确查找，返回 (file_id, node_id)
+# ─────────────────────────────────────────────────────
+def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str):
+    """
+    通过节点名在 DataWorks 工作空间中精确查找节点。
+
+    使用 ListFiles API 的 ExactFileName 参数做精确匹配（非模糊搜索），
+    避免名称相近的节点被误判为同一个节点。
+
+    Args:
+        client:     由 create_client() 返回的 SDK 客户端
+        project_id: DataWorks 工作空间 ID
+        node_name:  精确节点名称（与 task-config.json 中的 node_name 一致）
+    Returns:
+        (file_id, node_id) 元组，均为 int；未找到时返回 (None, None)
+    """
+    print(f"🔍 Checking if node '{node_name}' exists in project {project_id}...")
+    request = dw_models.ListFilesRequest(
+        project_id=project_id,
+        exact_file_name=node_name,   # 精确匹配，避免模糊 keyword 误判
+        page_size=10,
+    )
+    try:
+        resp = client.list_files_with_options(request, util_models.RuntimeOptions())
+        files = (
+            resp.body.data.files
+            if (resp.body and resp.body.data and resp.body.data.files)
+            else []
+        )
+    except Exception as error:
+        msg = error.message if hasattr(error, "message") else str(error)
+        print(f"   ListFiles failed: {msg}")
+        return None, None
+
+    if not files:
+        print(f"   Node '{node_name}' not found.")
+        return None, None
+
+    f = files[0]
+    file_id = f.file_id
+    # node_id 是节点发布到调度系统后的 ID，UpdateNode 使用它
+    node_id = f.node_id
+    print(f"   Found — FileId={file_id}, NodeId={node_id}")
+    return file_id, node_id
+
+
+# ─────────────────────────────────────────────────────
+# 辅助函数：通过 GetNode 拉取远端节点当前的 Spec
+# ─────────────────────────────────────────────────────
+def _get_remote_spec(client: DataWorksPublicClient, project_id: int, node_id: int) -> dict:
+    """
+    调用 GetNode API 获取远端节点的完整 FlowSpec，解析后返回 dict。
+    获取失败时返回空 dict（不中断主流程）。
+    """
+    try:
+        request = dw_models.GetNodeRequest(project_id=project_id, id=node_id)
+        resp = client.get_node_with_options(request, util_models.RuntimeOptions())
+        node = resp.body.node
+        if node and node.spec:
+            return json.loads(node.spec)
+    except Exception as error:
+        msg = error.message if hasattr(error, "message") else str(error)
+        print(f"   ⚠️  GetNode failed (diff skipped): {msg}")
+    return {}
+
+
+# ─────────────────────────────────────────────────────
+# 辅助函数：递归扁平化 dict，生成 "a.b.c" → value 映射
+# ─────────────────────────────────────────────────────
+def _flatten(d, prefix=""):
+    """
+    将嵌套 dict/list 递归展开为扁平的 key→value 字典，方便逐字段对比。
+
+    例如：{"spec": {"nodes": [{"name": "foo"}]}}
+    展开为：{"spec.nodes[0].name": "foo"}
+    """
+    items = {}
+    if isinstance(d, dict):
+        for k, v in d.items():
+            full_key = f"{prefix}.{k}" if prefix else k
+            items.update(_flatten(v, full_key))
+    elif isinstance(d, list):
+        for i, v in enumerate(d):
+            items.update(_flatten(v, f"{prefix}[{i}]"))
+    else:
+        items[prefix] = d
+    return items
+
+
+# ─────────────────────────────────────────────────────
+# 辅助函数：比对本地与远端 Spec，打印差异
+# ─────────────────────────────────────────────────────
+def _print_diff(local_spec: dict, remote_spec: dict) -> int:
+    """
+    将本地 Spec 与远端 Spec 扁平化后做字段级比对，打印所有有差异的字段。
+
+    Returns:
+        diff_count: 差异字段数量（0 表示无差异）
+    """
+    if not remote_spec:
+        print("   (Remote spec unavailable, skipping diff)")
+        return -1   # -1 表示无法判断
+
+    local_flat  = _flatten(local_spec)
+    remote_flat = _flatten(remote_spec)
+
+    all_keys = set(local_flat) | set(remote_flat)
+    diffs = []
+
+    for key in sorted(all_keys):
+        local_val  = local_flat.get(key, "<missing>")
+        remote_val = remote_flat.get(key, "<missing>")
+
+        # content 字段是嵌套的 JSON 字符串，需要进一步解析后比对
+        if key.endswith(".content") and isinstance(local_val, str) and isinstance(remote_val, str):
+            try:
+                local_inner  = json.loads(local_val)
+                remote_inner = json.loads(remote_val)
+                inner_diffs = _flatten(local_inner)
+                inner_remote = _flatten(remote_inner)
+                for ik in sorted(set(inner_diffs) | set(inner_remote)):
+                    iv  = inner_diffs.get(ik,  "<missing>")
+                    irv = inner_remote.get(ik, "<missing>")
+                    if iv != irv:
+                        diffs.append((f"{key} → {ik}", irv, iv))
+                continue   # 跳过原始字符串比对
+            except (json.JSONDecodeError, TypeError):
+                pass   # 解析失败则降级为字符串比对
+
+        if local_val != remote_val:
+            diffs.append((key, remote_val, local_val))
+
+    if not diffs:
+        print("   ✅ No differences detected. Node is already up to date.")
+        return 0
+
+    print(f"   📋 Found {len(diffs)} field(s) with differences:\n")
+    col_w = max(len(d[0]) for d in diffs) + 2
+    print(f"   {'Field':<{col_w}}  {'Remote (current)':<40}  {'Local (new)'}")
+    print(f"   {'-'*col_w}  {'-'*40}  {'-'*40}")
+    for field, old_val, new_val in diffs:
+        old_str = str(old_val)[:38] + ".." if len(str(old_val)) > 40 else str(old_val)
+        new_str = str(new_val)[:38] + ".." if len(str(new_val)) > 40 else str(new_val)
+        print(f"   {field:<{col_w}}  {old_str:<40}  {new_str}")
+    print()
+    return len(diffs)
+
+
+# ─────────────────────────────────────────────────────
+# 函数五：增量更新已有节点（含 diff 输出）
+# ─────────────────────────────────────────────────────
+def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, config: dict) -> None:
+    """
+    调用 DataWorks UpdateNode API，以增量方式更新节点配置。
+    更新前会拉取远端当前 Spec，打印字段级 diff，有差异才执行更新。
+
+    Args:
+        client:     由 create_client() 返回的 SDK 客户端
+        project_id: DataWorks 工作空间 ID（GetNode 需要）
+        node_id:    由 get_node_id() 返回的 NodeId
+        config:     由 task-config.json 读取的配置字典
+    """
+    local_spec  = json.loads(build_spec(config))
+    remote_spec = _get_remote_spec(client, project_id, node_id)
+
+    print("\n   🔎 Comparing local config with remote node spec...")
+    diff_count = _print_diff(local_spec, remote_spec)
+
+    if diff_count == 0:
+        print("   Skipping update — nothing changed.")
+        return
+
+    # 有差异（或无法拉取远端）则执行更新
+    update_request = dw_models.UpdateNodeRequest(
+        id=node_id,
+        spec=json.dumps(local_spec, ensure_ascii=False)
+    )
+    runtime = util_models.RuntimeOptions()
+
+    try:
+        resp = client.update_node_with_options(update_request, runtime)
+        if resp.body.success:
+            print(f"   ✅ Node updated successfully. (NodeId={node_id})")
+        else:
+            print(f"   ❌ UpdateNode returned success=False. RequestId={resp.body.request_id}")
+            raise RuntimeError("UpdateNode returned success=False")
+    except Exception as error:
+        msg = error.message if hasattr(error, "message") else str(error)
+        print(f"   ❌ UpdateNode failed: {msg}")
+        if hasattr(error, "data") and error.data:
+            print(error.data.get("Recommend", ""))
+        raise

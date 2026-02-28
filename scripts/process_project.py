@@ -1,41 +1,52 @@
 # -*- coding: utf-8 -*-
 """
 process_project.py
-职责：读取单个项目的 config.json，调用 DataWorks API 创建节点。
+职责：读取单个功能目录的 task-config.json，以 Upsert 方式创建或更新 DataWorks 节点。
 
-这个文件是 deploy.py 和 dataworks_client.py 之间的"桥梁"：
-  deploy.py         → 找到项目目录
-  process_project.py → 读取 config.json，传给 API
-  dataworks_client.py → 实际调用 DataWorks API
+Upsert 流程：
+  1. 读取 task-config.json
+  2. 调用 get_node_id() 精确查找节点是否已存在
+  3a. 节点存在 → 调用 update_node() 增量更新
+  3b. 节点不存在 → 调用 create_node() 创建新节点
 """
 
 import json
 from pathlib import Path
 
-# 从同目录的 dataworks_client.py 导入 create_node 函数
-from dataworks_client import create_node
+from dataworks_client import create_node, get_node_id, update_node
 
 
 def process_project(client, project_id: int, project_dir: str) -> None:
     """
-    处理单个项目：读取配置并在 DataWorks 中创建对应的定时同步节点。
+    以 Upsert 方式处理单个功能目录：节点存在则更新，不存在则创建。
 
     Args:
         client:      DataWorks SDK 客户端（由 deploy.py 传入）
         project_id:  DataWorks 工作空间 ID
-        project_dir: 项目目录路径，如 "projects/Test"
+        project_dir: 功能目录路径，如 "feature/test-feature"
                      该目录下必须有 task-config.json 文件
     """
-    # ── 第一步：读取项目配置 ───────────────────────────────────
+    # ── 第一步：读取配置 ────────────────────────────────────────
     config_path = Path(project_dir) / "task-config.json"
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # 从配置中取出节点名，用于日志打印
-    node_name = config["node_name"]   # 例如 "github_test"
+    node_name = config["node_name"]
+    print(f"\n{'='*50}")
+    print(f"Processing: {node_name}  (dir: {project_dir})")
+    print(f"{'='*50}")
 
-    # ── 第二步：调用 API 创建节点 ──────────────────────────────
-    print(f"Creating node: {node_name}")
-    create_node(client, config, project_id)   # 实际的 API 调用在 dataworks_client.py 中
+    # ── 第二步：查询节点是否已存在 ─────────────────────────────
+    _, node_id = get_node_id(client, project_id, node_name)
 
-    print(f"Done: {node_name}")
+    # ── 第三步：Upsert ─────────────────────────────────────────
+    if node_id:
+        # 节点已存在 → diff + 更新
+        print(f"[UPDATE] Node '{node_name}' already exists (NodeId={node_id}). Updating...")
+        update_node(client, project_id, node_id, config)
+    else:
+        # 节点不存在 → 创建
+        print(f"[CREATE] Node '{node_name}' not found. Creating new node...")
+        create_node(client, config, project_id)
+
+    print(f"Done: {node_name}\n")
