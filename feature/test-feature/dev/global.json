@@ -12,7 +12,7 @@
         }
     },
     "task": {
-        "node_name": "update_task_1",
+        "node_name": "update_task_2",
         "cron": "00 10 00-23/1 * * ?",
         "reader_datasource": "oss_demo",
         "reader_path": "parquet/*.parquet",
