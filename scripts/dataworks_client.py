@@ -410,6 +410,7 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
 
     # 有差异（或无法拉取远端）则执行更新
     update_request = dw_models.UpdateNodeRequest(
+        project_id=project_id,
         id=node_id,
         spec=json.dumps(local_spec, ensure_ascii=False)
     )
