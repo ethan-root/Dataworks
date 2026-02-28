@@ -8,6 +8,16 @@ on:
         description: '指定功能目录名称（逗号分隔，留空则处理所有）例: user-feature,test-feature'
         required: false
         default: ''
+      env_name:
+        description: '目标环境'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+          - pre-prod
+          - prod
 
 env:
   DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
@@ -33,4 +43,4 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Deploy DataWorks Sync Tasks
-        run: python scripts/deploy.py --project-dir feature/test-feature
+        run: python scripts/deploy.py --project-dir feature/test-feature/${{ github.event.inputs.env_name }}

@@ -19,6 +19,16 @@ on:
         description: '功能目录'
         required: false
         default: 'feature/test-feature'
+      env_name:
+        description: '目标环境'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+          - pre-prod
+          - prod
 
 env:
   DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
@@ -46,15 +56,15 @@ jobs:
 
       - name: Create MaxCompute Table
         if: ${{ github.event.inputs.action == 'create_table' }}
-        run: python scripts/create_table.py --project-dir ${{ github.event.inputs.project_dir }}
+        run: python scripts/create_table.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}
 
       - name: Create DataWorks Node
         if: ${{ github.event.inputs.action == 'create_node' }}
-        run: python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}
+        run: python scripts/deploy.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}
 
       - name: Publish DataWorks Node
         if: ${{ github.event.inputs.action == 'publish_node' }}
-        run: python scripts/publish_node.py --project-dir ${{ github.event.inputs.project_dir }}
+        run: python scripts/publish_node.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}
 
       - name: Clean MaxCompute Tables (Dry Run by default)
         if: ${{ github.event.inputs.action == 'clean_mc_tables' }}
@@ -62,8 +72,8 @@ jobs:
 
       - name: Create OSS DataSource
         if: ${{ github.event.inputs.action == 'create_oss_ds' }}
-        run: python scripts/create_oss_ds.py --project-dir ${{ github.event.inputs.project_dir }}
+        run: python scripts/create_oss_ds.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}
 
       - name: Create MaxCompute DataSource
         if: ${{ github.event.inputs.action == 'create_mc_ds' }}
-        run: python scripts/create_mc_ds.py --project-dir ${{ github.event.inputs.project_dir }}
+        run: python scripts/create_mc_ds.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}

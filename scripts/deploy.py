@@ -57,12 +57,16 @@ def main():
         # 模式1：单项目 —— 直接处理指定目录
         process_project(client, project_id, args.project_dir)
     else:
-        # 模式2：全量 —— 扫描 feature/ 下所有包含 task-config.json 的子目录
+        # 模式2：全量 —— 扫描 feature/ 下所有包含 task-config.json 的子目录（现为环境目录）
         projects_path = Path(args.projects_dir)
-        project_dirs = sorted(
-            d for d in projects_path.iterdir()
-            if d.is_dir() and (d / "task-config.json").exists()   # 只处理有 task-config.json 的目录
-        )
+        project_dirs = []
+        for feature_dir in projects_path.iterdir():
+            if feature_dir.is_dir():
+                for env_dir in feature_dir.iterdir():
+                    if env_dir.is_dir() and (env_dir / "task-config.json").exists():
+                        project_dirs.append(env_dir)
+        
+        project_dirs = sorted(project_dirs)
         if not project_dirs:
             print(f"No projects found in {projects_path}")
             sys.exit(1)
