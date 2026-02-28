@@ -1,11 +1,11 @@
 name: DataWorks Sync Management
 
 on:
-  # 手动触发 —— 可指定品牌项目
+  # 手动触发 —— 可指定功能目录
   workflow_dispatch:
     inputs:
       projects:
-        description: '指定品牌项目名称（逗号分隔，留空则处理所有）例: Gucci,Balenciaga'
+        description: '指定功能目录名称（逗号分隔，留空则处理所有）例: user-feature,test-feature'
         required: false
         default: ''
 
@@ -33,4 +33,4 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Deploy DataWorks Sync Tasks
-        run: python scripts/deploy.py --project-dir projects/Test
+        run: python scripts/deploy.py --project-dir feature/test-feature

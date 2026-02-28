@@ -4,8 +4,8 @@ deploy.py
 职责：创建 DataWorks 定时节点的命令行入口。
 
 支持两种运行模式：
-  1. 单项目模式：--project-dir projects/Test   （只创建 Test 项目的节点）
-  2. 全量模式：  不传参数                       （自动扫描 projects/ 下所有项目）
+  1. 单项目模式：--project-dir feature/test-feature   （只创建 test-feature 的节点）
+  2. 全量模式：  不传参数                            （自动扫描 feature/ 下所有项目）
 
 所需环境变量（在 GitHub Actions 中通过 secrets 注入）：
   ALIBABA_CLOUD_ACCESS_KEY_ID      : 阿里云 AccessKey ID
@@ -33,11 +33,11 @@ def main():
     parser = argparse.ArgumentParser(description="DataWorks Deployment Tool")
     parser.add_argument(
         "--project-dir", type=str, default="",
-        help="指定单个项目目录路径（留空则自动扫描 --projects-dir 下所有项目）"
+        help="指定单个功能目录路径（留空则自动扫描 --projects-dir 下所有功能）"
     )
     parser.add_argument(
-        "--projects-dir", type=str, default="projects",
-        help="项目根目录，默认为 'projects'"
+        "--projects-dir", type=str, default="feature",
+        help="功能根目录，默认为 'feature'"
     )
     args = parser.parse_args()
 
@@ -57,7 +57,7 @@ def main():
         # 模式1：单项目 —— 直接处理指定目录
         process_project(client, project_id, args.project_dir)
     else:
-        # 模式2：全量 —— 扫描 projects/ 下所有包含 config.json 的子目录
+        # 模式2：全量 —— 扫描 feature/ 下所有包含 task-config.json 的子目录
         projects_path = Path(args.projects_dir)
         project_dirs = sorted(
             d for d in projects_path.iterdir()

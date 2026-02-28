@@ -19,10 +19,10 @@ Dataworks/
 ├── .github/workflows/
 │   ├── dataworks_sync.yml         # 生产部署流水线
 │   └── test_dataworks.yml         # 分步测试流水线
-├── projects/                       # 品牌项目目录
-│   ├── Test/config.json
-│   ├── Gucci/config.json
-│   └── Balenciaga/config.json
+├── feature/                        # 功能目录
+│   ├── test-feature/task-config.json
+│   ├── user-feature/task-config.json
+│   └── guest-feature/task-config.json
 ├── scripts/
 │   ├── dataworks_client.py        # DataWorks API 封装类
 │   ├── process_project.py         # 单项目处理逻辑
@@ -44,7 +44,7 @@ Dataworks/
 
 ### 2. 新增品牌项目
 
-在 `projects/` 下创建新目录，添加 `config.json`：
+在 `feature/` 下创建新目录（如 `user-feature/`），添加 `task-config.json`：
 
 ```json
 {
@@ -79,7 +79,7 @@ Dataworks/
 
 ### 3. 触发部署
 
-- **自动触发**：Push `config.json` 到 `main` 分支
+- **自动触发**：Push `task-config.json` 到 `main` 分支
 - **手动触发**：GitHub Actions → `workflow_dispatch`
 
 ### 4. 分步测试
@@ -110,10 +110,10 @@ export DATAWORKS_PROJECT_ID=1186017
 # 全量部署
 python scripts/deploy.py
 
-# 指定项目
-python scripts/deploy.py --projects Gucci
+# 指定功能目录
+python scripts/deploy.py --project-dir feature/user-feature
 
 # 分步测试
 python scripts/deploy.py --step check_cli
-python scripts/deploy.py --step create_job --project-dir projects/Test
+python scripts/deploy.py --step create_job --project-dir feature/test-feature
 ```

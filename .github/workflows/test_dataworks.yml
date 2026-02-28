@@ -16,9 +16,9 @@ on:
           - create_oss_ds
           - create_mc_ds
       project_dir:
-        description: '项目目录'
+        description: '功能目录'
         required: false
-        default: 'projects/Test'
+        default: 'feature/test-feature'
 
 env:
   DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
