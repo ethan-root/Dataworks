@@ -7,7 +7,7 @@ dataworks_client.py
   - create_client()  : 初始化 DataWorks SDK 客户端
   - build_spec()     : 把 task-config.json 的配置转换成 DataWorks 节点所需的 JSON 格式
   - create_node()    : 调用 DataWorks API 创建定时同步节点
-  - get_node_id()    : 通过节点名精确查找节点，返回 (file_id, node_id)
+  - get_node_id()    : 通过节点名精确查找节点，返回 Data Studio 节点 ID
   - update_node()    : 调用 DataWorks API 增量更新已有节点
 """
 
@@ -235,26 +235,28 @@ def create_node(client: DataWorksPublicClient, config: dict, project_id: int) ->
 
 
 # ─────────────────────────────────────────────────────
-# 函数四：通过节点名精确查找，返回 (file_id, node_id)
+# 函数四：通过节点名精确查找，返回数据开发节点 ID (Data Studio Node ID)
 # ─────────────────────────────────────────────────────
-def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str):
+def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str) -> int:
     """
     通过节点名在 DataWorks 工作空间中精确查找节点。
 
-    使用 ListFiles API 的 ExactFileName 参数做精确匹配（非模糊搜索），
-    避免名称相近的节点被误判为同一个节点。
+    使用 ListFiles API 的 ExactFileName 参数做精确匹配（非模糊搜索）。
+    注意：在 DataWorks 2024-05-18 OpenAPI 中，数据开发（Data Studio）中的节点（Node）
+    其唯一标识对应的是 ListFiles 接口返回的 file_id（而返回的 node_id 是发布后调度系统的 ID）。
+    UpdateNode 和 GetNode 接口需要的 id 参数均为这个数据开发节点 ID（file_id）。
 
     Args:
         client:     由 create_client() 返回的 SDK 客户端
         project_id: DataWorks 工作空间 ID
         node_name:  精确节点名称（与 task-config.json 中的 node_name 一致）
     Returns:
-        (file_id, node_id) 元组，均为 int；未找到时返回 (None, None)
+        节点 ID（int）；未找到时返回 None
     """
     print(f"🔍 Checking if node '{node_name}' exists in project {project_id}...")
     request = dw_models.ListFilesRequest(
         project_id=project_id,
-        exact_file_name=node_name,   # 精确匹配，避免模糊 keyword 误判
+        exact_file_name=node_name,
         page_size=10,
     )
     try:
@@ -267,18 +269,17 @@ def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str):
     except Exception as error:
         msg = error.message if hasattr(error, "message") else str(error)
         print(f"   ListFiles failed: {msg}")
-        return None, None
+        return None
 
     if not files:
         print(f"   Node '{node_name}' not found.")
-        return None, None
+        return None
 
     f = files[0]
-    file_id = f.file_id
-    # node_id 是节点发布到调度系统后的 ID，UpdateNode 使用它
-    node_id = f.node_id
-    print(f"   Found — FileId={file_id}, NodeId={node_id}")
-    return file_id, node_id
+    # Data Studio 节点的唯一标识在 ListFiles 里对应 file_id
+    ds_node_id = f.file_id
+    print(f"   Found — DataStudio NodeId={ds_node_id} (Scheduled NodeId={f.node_id})")
+    return ds_node_id
 
 
 # ─────────────────────────────────────────────────────

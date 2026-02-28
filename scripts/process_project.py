@@ -37,20 +37,15 @@ def process_project(client, project_id: int, project_dir: str) -> None:
     print(f"{'='*50}")
 
     # ── 第二步：查询节点是否已存在 ─────────────────────────────
-    # 用 file_id 判断节点是否存在（node_id 只有提交发布后才有值，可能为 None）
-    file_id, node_id = get_node_id(client, project_id, node_name)
+    # get_node_id 返回的是 Data Studio 节点 ID（即 API 中的 file_id）
+    # 这个 ID 在节点创建后即存在，UpdateNode 也是使用此 ID
+    ds_node_id = get_node_id(client, project_id, node_name)
 
     # ── 第三步：Upsert ─────────────────────────────────────────
-    if file_id:
-        # 节点已存在（FileId 有值）
-        if node_id:
-            # 已发布到调度系统 → 可以 UpdateNode
-            print(f"[UPDATE] Node '{node_name}' exists and published (NodeId={node_id}). Updating...")
-            update_node(client, project_id, node_id, config)
-        else:
-            # 节点文件已创建但尚未提交/发布（NodeId=None）→ 跳过更新
-            print(f"[SKIP]   Node '{node_name}' exists (FileId={file_id}) but not yet submitted (NodeId=None).")
-            print(f"         Please submit/publish the node in DataWorks Studio first, then re-run to update.")
+    if ds_node_id:
+        # 节点已存在 → diff + 更新
+        print(f"[UPDATE] Node '{node_name}' already exists (NodeId={ds_node_id}). Updating...")
+        update_node(client, project_id, ds_node_id, config)
     else:
         # 节点不存在 → 创建
         print(f"[CREATE] Node '{node_name}' not found. Creating new node...")
