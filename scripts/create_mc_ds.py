@@ -23,18 +23,23 @@ from alibabacloud_tea_util import models as util_models
 
 from dataworks_client import create_client
 
+from config_merger import load_merged_mc_ds_config
+
 def main():
-    parser = argparse.ArgumentParser(description="Create MaxCompute DataSource")
-    parser.add_argument("--project-dir", type=str, default="projects/Test", help="项目目录路径")
+    # ── 解析命令行参数 ────────────────────────────────────────────
+    parser = argparse.ArgumentParser(description="Create DataWorks MaxCompute DataSource")
+    parser.add_argument(
+        "--project-dir", type=str, default="projects/Test",
+        help="项目目录路径，该目录下必须有 maxcompute-datasource.json 文件（与 global.json 同目录）"
+    )
     args = parser.parse_args()
 
-    config_path = Path(args.project_dir) / "maxcompute-datasource.json"
-    if not config_path.exists():
-        print(f"ERROR: {config_path} not found.")
+    # ── 读取 MaxCompute 数据源配置（引入合并覆盖逻辑）────────
+    try:
+        config = load_merged_mc_ds_config(args.project_dir)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
         sys.exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        ds_config = json.load(f)
 
     region = os.environ.get("ALIYUN_REGION", "cn-shanghai")
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
@@ -59,17 +64,17 @@ def main():
     # 或者如果不传，后端可能会默认取。我们先明确传入 "PrimaryAccount" 试试看。
     connection_properties["authType"] = "PrimaryAccount"
 
-    print(f"Creating MaxCompute DataSource '{ds_config['name']}' in Project {project_id}...")
+    print(f"Creating MaxCompute DataSource '{config['name']}' in Project {project_id}...")
     print(f"  Request connection_properties: {json.dumps(connection_properties, ensure_ascii=False)}")
 
     client = create_client()
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
-        name=ds_config["name"],
+        name=config["name"],
         type="odps",  # API 规定 MaxCompute 是 odps
         connection_properties_mode="UrlMode", # 回退到 UrlMode，InstanceMode 之前报错不支持 odps
         connection_properties=json.dumps(connection_properties, ensure_ascii=False),
-        description=ds_config.get("description", "")
+        description=config.get("description", "")
     )
 
     try:

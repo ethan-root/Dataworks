@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 from dataworks_client import create_node, get_node_id, update_node
-
+from config_merger import load_merged_node_config
 
 def process_project(client, project_id: int, project_dir: str) -> None:
     """
@@ -26,10 +26,8 @@ def process_project(client, project_id: int, project_dir: str) -> None:
         project_dir: 功能目录路径，如 "feature/test-feature"
                      该目录下必须有 task-config.json 文件
     """
-    # ── 第一步：读取配置 ────────────────────────────────────────
-    config_path = Path(project_dir) / "task-config.json"
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    # ── 第一步：读取配置（已引入合并覆盖逻辑）───────────────────
+    config = load_merged_node_config(project_dir)
 
     node_name = config["node_name"]
     print(f"\n{'='*50}")

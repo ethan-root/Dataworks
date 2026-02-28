@@ -17,18 +17,23 @@ from alibabacloud_tea_util import models as util_models
 from dataworks_client import create_client
 
 
+from config_merger import load_merged_oss_ds_config
+
 def main():
-    parser = argparse.ArgumentParser(description="Create OSS DataSource")
-    parser.add_argument("--project-dir", type=str, default="projects/Test", help="项目目录路径")
+    # ── 解析命令行参数 ────────────────────────────────────────────
+    parser = argparse.ArgumentParser(description="Create DataWorks OSS DataSource")
+    parser.add_argument(
+        "--project-dir", type=str, default="projects/Test",
+        help="项目目录路径，该目录下必须有 oss-datasource.json 文件（全局配置同目录）"
+    )
     args = parser.parse_args()
 
-    config_path = Path(args.project_dir) / "oss-datasource.json"
-    if not config_path.exists():
-        print(f"ERROR: {config_path} not found.")
+    # ── 读取 OSS 数据源配置（引入合并覆盖逻辑）───────────────
+    try:
+        config = load_merged_oss_ds_config(args.project_dir)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
         sys.exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        ds_config = json.load(f)
 
     # 从环境变量获取 AK/SK 用于数据源鉴权
     ak = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
@@ -57,16 +62,25 @@ def main():
         sys.exit(1)
     project_id = int(project_id_str)
 
-    print(f"Creating OSS DataSource '{ds_config['name']}' in Project {project_id}...")
+    print(f"Creating OSS DataSource '{config['name']}' in Project {project_id}...")
     
     client = create_client()
+    # 构造请求体
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
-        name=ds_config["name"],
-        type="oss",  # 数据源类型标识
-        connection_properties_mode="UrlMode", # UrlMode 或 InstanceMode
-        connection_properties=json.dumps(connection_properties, ensure_ascii=False),
-        description=ds_config.get("description", "")
+        name=config.get("name"),
+        data_source_type="oss",
+        description=config.get("description", ""),
+        env_type=1,
+        connection_properties_mode="UrlMode",
+        url=f"{config.get('endpoint')}",
+        # string 类型的 content 字段，存放 AK/SK 等凭证信息
+        content=json.dumps({
+            "accessId": ak,
+            "accessKey": sk,
+            "bucket": config.get("bucket"),
+            "endpoint": config.get("endpoint")
+        })
     )
     
     try:
