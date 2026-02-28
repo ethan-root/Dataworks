@@ -11,7 +11,7 @@
     "timezone": "Asia/Shanghai",
     "instanceMode": "Immediately",
     "reader": {
-        "datasource": "oss_test_2",
+        "datasource": "oss_demo",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet",
         "envType": 1,
