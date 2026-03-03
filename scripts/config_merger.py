@@ -55,10 +55,18 @@ def _load_json_silently(filepath: Path) -> dict:
         return {}
 
 def _load_base_config(project_dir: str, template_name: str) -> dict:
-    """内部辅助：强制读取环境下的基础模板配置，不存在则抛出异常"""
-    cfg_path = Path(project_dir) / template_name
+    """内部辅助：强制去项目根目录的 default-setting 文件夹下读取基础模板配置，不存在则抛出异常"""
+    # 获取项目根目录 (假设现在的执行路径在 scripts 或者项目根目录下，通常 os.getcwd() 或向上回溯)
+    # 因为 deploy.py 传进来的 project_dir 是类似 feature/test-feature/dev
+    root_dir = Path(project_dir).resolve().parents[2] if 'feature' in project_dir else Path(project_dir).resolve()
+    # 为稳妥起见，如果找不到 default-setting，尝试直接在项目根找
+    cfg_path = root_dir / "default-setting" / template_name
     if not cfg_path.exists():
-        raise FileNotFoundError(f"Missing required base template: {cfg_path}")
+        # 如果通过层级找失败了，回退到当前工作目录下的 default-setting（兼容不同执行路径）
+        cfg_path = Path.cwd() / "default-setting" / template_name
+        if not cfg_path.exists():
+            raise FileNotFoundError(f"Missing required base template: {cfg_path}")
+            
     with open(cfg_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -67,11 +75,11 @@ def load_merged_node_config(project_dir: str) -> dict:
     加载节点任务配置（用于 process_project.py）：
     读取 task-config.json 底板，并将 global.json 中 [task] 的值覆盖上去。
     """
-    # 1. 读底板
-    config = _load_base_config(project_dir, "task-config.json")
+    # 1. 读底板 (现在名为 integration-config.json)
+    config = _load_base_config(project_dir, "integration-config.json")
     
-    # 2. 读 global (可能不存在，允许返回空)
-    global_cfg = _load_json_silently(Path(project_dir) / "global.json")
+    # 2. 读 setting.json (原 global.json)
+    global_cfg = _load_json_silently(Path(project_dir) / "setting.json")
     task_global = global_cfg.get("task", {})
 
     # 3. 动态属性覆写 (如果有)
@@ -129,7 +137,7 @@ def load_merged_oss_ds_config(project_dir: str) -> dict:
     读取 oss-datasource.json 底板，并将 global.json 中 [oss_datasource] 的值覆盖上去。
     """
     config = _load_base_config(project_dir, "oss-datasource.json")
-    global_cfg = _load_json_silently(Path(project_dir) / "global.json")
+    global_cfg = _load_json_silently(Path(project_dir) / "setting.json")
     oss_global = global_cfg.get("datasource", {}).get("oss", {})
     
     if not oss_global:
@@ -151,7 +159,7 @@ def load_merged_mc_ds_config(project_dir: str) -> dict:
     读取 maxcompute-datasource.json 底板，并将 global.json 中 [mc_datasource] 的值覆盖上去。
     """
     config = _load_base_config(project_dir, "maxcompute-datasource.json")
-    global_cfg = _load_json_silently(Path(project_dir) / "global.json")
+    global_cfg = _load_json_silently(Path(project_dir) / "setting.json")
     mc_global = global_cfg.get("datasource", {}).get("mc", {})
     
     if not mc_global:

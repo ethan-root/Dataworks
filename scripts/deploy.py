@@ -25,7 +25,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 # 导入同目录的两个模块
 from dataworks_client import create_client    # 初始化 DataWorks SDK 客户端
-from process_project import process_project   # 读取 config.json 并创建节点
+from create_integration_node import process_project   # 读取 config.json 并创建节点
 
 
 def main():
@@ -57,13 +57,13 @@ def main():
         # 模式1：单项目 —— 直接处理指定目录
         process_project(client, project_id, args.project_dir)
     else:
-        # 模式2：全量 —— 扫描 feature/ 下所有包含 task-config.json 的子目录（现为环境目录）
+        # 模式2：全量 —— 扫描 feature/ 下所有包含 setting.json 的子目录（现为环境目录）
         projects_path = Path(args.projects_dir)
         project_dirs = []
         for feature_dir in projects_path.iterdir():
             if feature_dir.is_dir():
                 for env_dir in feature_dir.iterdir():
-                    if env_dir.is_dir() and (env_dir / "task-config.json").exists():
+                    if env_dir.is_dir() and (env_dir / "setting.json").exists():
                         project_dirs.append(env_dir)
         
         project_dirs = sorted(project_dirs)
