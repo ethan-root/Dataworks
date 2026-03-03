@@ -7,7 +7,41 @@ config_merger.py
 """
 
 import json
+import re
 from pathlib import Path
+
+def _parse_columns_from_sql(filepath: Path) -> list:
+    """内部辅助：从 create-table.sql 中通过正则解析出所有的字段名（忽略分区字段）"""
+    columns = []
+    try:
+        content = filepath.read_text(encoding="utf-8")
+        # 提取 CREATE TABLE 括号内部的字段定义块
+        match = re.search(r'\((.*?)\)\s*(?:COMMENT|PARTITIONED)', content, re.IGNORECASE | re.DOTALL)
+        if not match:
+            # Fallback 如果没有 PARTITIONED 块
+            match = re.search(r'\((.*?)\)', content, re.IGNORECASE | re.DOTALL)
+            
+        if match:
+            cols_block = match.group(1)
+            # 按行分割，提取每一行被反引号 ` 包裹的，或者首个单词作为列名
+            for line in cols_block.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('--'):
+                    continue
+                # 尝试提取反引号的内容 `col_name`
+                col_match = re.search(r'`([^`]+)`', line)
+                if col_match:
+                    columns.append(col_match.group(1))
+                else:
+                    # 获取该行的第一个单词（非反引号情况）
+                    parts = line.split()
+                    if parts:
+                        col_name = parts[0].strip()
+                        if col_name.lower() not in ('primary', 'key', 'unique'):
+                            columns.append(col_name)
+    except Exception as e:
+        print(f"   [WARN] Failed to parse SQL columns from {filepath.name}: {e}")
+    return columns
 
 def _load_json_silently(filepath: Path) -> dict:
     """内部辅助：静默读取 json 文件，不存在或报错时返回空字典"""
@@ -62,6 +96,29 @@ def load_merged_node_config(project_dir: str) -> dict:
         config["writer"]["table"] = task_global["writer_table"]
     if "writer_partition" in task_global and "writer" in config:
         config["writer"]["partition"] = task_global["writer_partition"]
+
+    # 4. 动态解析 create-table.sql 并注入字段映射
+    sql_path = Path(project_dir) / "create-table.sql"
+    if sql_path.exists():
+        columns = _parse_columns_from_sql(sql_path)
+        if columns and "reader" in config and "writer" in config:
+            # 构造 Reader mapping (默认转为 string 或 binary 取决于你的需求，这里默认用 BINARY 兼容 Parquet)
+            reader_cols = []
+            for idx, col in enumerate(columns):
+                reader_cols.append({
+                    "name": col,
+                    "type": "BINARY",
+                    "index": idx,
+                    "originalType": "UTF8",
+                    "repetition": "OPTIONAL"
+                })
+            
+            # 构造 Writer mapping (MaxCompute 目标端只需列名数组)
+            writer_cols = columns
+
+            config["reader"]["column"] = reader_cols
+            config["writer"]["column"] = writer_cols
+            print(f"   [INFO] Auto-extracted {len(columns)} columns from create-table.sql for Data Integration Mapping.")
 
     return config
 

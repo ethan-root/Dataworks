@@ -14,30 +14,7 @@
         "datasource": "oss_demo",
         "path": "parquet/*.parquet",
         "fileFormat": "parquet",
-        "envType": 1,
-        "column": [
-            {
-                "originalType": "UTF8",
-                "name": "name",
-                "index": 0,
-                "repetition": "OPTIONAL",
-                "type": "BINARY"
-            },
-            {
-                "originalType": "UTF8",
-                "name": "age",
-                "index": 1,
-                "repetition": "OPTIONAL",
-                "type": "BINARY"
-            },
-            {
-                "originalType": "UTF8",
-                "name": "location",
-                "index": 2,
-                "repetition": "OPTIONAL",
-                "type": "BINARY"
-            }
-        ]
+        "envType": 1
     },
     "writer": {
         "datasource": "mc_test_2",
@@ -45,12 +22,7 @@
         "partition": "pt='${bizdate}'",
         "envType": 1,
         "isSupportThreeModel": false,
-        "tunnelQuota": "default",
-        "column": [
-            "name",
-            "age",
-            "location"
-        ]
+        "tunnelQuota": "default"
     },
     "parameters": [
         {
