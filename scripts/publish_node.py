@@ -2,17 +2,7 @@
 """
 publish_node.py
 职责：将指定 DataWorks 项目中的节点提交并发布到生产环境。
-
-DataWorks 发布流程（2024-05-18 API）：
-  1. ListFiles         — 按节点名搜索，获取 FileId
-  2. SubmitFile        — 提交指定 FileId，生成 DeploymentId
-  3. GetDeployment     — 轮询部署状态，直到 Success 或 Fail
-
-所需环境变量：
-  ALIBABA_CLOUD_ACCESS_KEY_ID
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET
-  ALIYUN_REGION
-  DATAWORKS_PROJECT_ID
+使用全新的 DataWorks 2024-05-18 Pipeline API (CreatePipelineRunRequest)。
 """
 
 import argparse
@@ -25,161 +15,113 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from dataworks_client import create_client
+from dataworks_client import create_client, get_node_id
+from config_merger import load_merged_node_config
 
 from alibabacloud_dataworks_public20240518 import models as dw_models
 from alibabacloud_tea_util import models as util_models
 
-
-# ── 轮询参数 ──────────────────────────────────────────────
-POLL_INTERVAL_SEC = 10   # 每次轮询间隔（秒）
-POLL_TIMEOUT_SEC  = 300  # 最长等待时间（秒）
-
-
-def get_file_id(client, project_id: int, node_name: str) -> int:
-    """
-    通过节点名查找对应的 FileId。
-    DataWorks 中创建节点时会生成一个 FileId，提交时需要用它。
-
-    Args:
-        client:     DataWorks SDK Client
-        project_id: DataWorks 工作空间 ID
-        node_name:  节点名（即 task-config.json 中的 node_name 字段）
-    Returns:
-        FileId（整数）
-    Raises:
-        SystemExit: 未找到节点时退出
-    """
-    print(f"🔍 Searching for node '{node_name}' in project {project_id}...")
-    request = dw_models.ListFilesRequest(
-        project_id=project_id,
-        keyword=node_name,
-        page_size=10,
-    )
-    resp = client.list_files_with_options(request, util_models.RuntimeOptions())
-    files = resp.body.data.files if (resp.body.data and resp.body.data.files) else []
-
-    # 精确匹配节点名（keyword 是模糊搜索，可能返回多个）
-    matched = [f for f in files if f.file_name == node_name]
-    if not matched:
-        print(f"❌ Node '{node_name}' not found. Has it been created via create_node?")
-        print(f"   Available files: {[f.file_name for f in files]}")
-        sys.exit(1)
-
-    file_id = matched[0].file_id
-    print(f"✅ Found node '{node_name}', FileId={file_id}")
-    return file_id
-
-
-def submit_file(client, project_id: int, file_id: int, comment: str = "Auto-publish by GitHub Actions") -> int:
-    """
-    提交指定 FileId，触发发布流程，返回 DeploymentId。
-
-    Args:
-        client:     DataWorks SDK Client
-        project_id: DataWorks 工作空间 ID
-        file_id:    要提交的文件 ID
-        comment:    发布备注（可选）
-    Returns:
-        DeploymentId（整数）
-    """
-    print(f"📤 Submitting FileId={file_id} for project {project_id}...")
-    request = dw_models.SubmitFileRequest(
-        project_id=project_id,
-        file_id=file_id,
-        comment=comment,
-    )
-    resp = client.submit_file_with_options(request, util_models.RuntimeOptions())
-    deployment_id = resp.body.deployment_id
-    if not deployment_id:
-        print("❌ SubmitFile returned no DeploymentId, check DataWorks console for errors.")
-        sys.exit(1)
-    print(f"✅ Submitted successfully. DeploymentId={deployment_id}")
-    return deployment_id
-
-
-def wait_for_deployment(client, project_id: int, deployment_id: int) -> None:
-    """
-    轮询 GetDeployment API，直到部署成功或失败。
-
-    Args:
-        client:        DataWorks SDK Client
-        project_id:    DataWorks 工作空间 ID
-        deployment_id: 由 SubmitFile 返回的 Deployment ID
-    Raises:
-        SystemExit: 部署失败或超时时退出
-    """
-    print(f"⏳ Polling deployment status (DeploymentId={deployment_id})...")
-    elapsed = 0
-    while elapsed < POLL_TIMEOUT_SEC:
-        request = dw_models.GetDeploymentRequest(
-            project_id=project_id,
-            deployment_id=deployment_id,
-        )
-        resp = client.get_deployment_with_options(request, util_models.RuntimeOptions())
-        status = resp.body.deployment.status if resp.body.deployment else "Unknown"
-
-        print(f"   [{elapsed:>3}s] Status: {status}")
-
-        if status == "Success":
-            print(f"✅ Deployment succeeded!")
-            return
-        elif status in ("Fail", "Rejected", "Abort"):
-            print(f"❌ Deployment failed with status: {status}")
-            # 打印错误详情（如有）
-            detail = resp.body.deployment
-            if detail:
-                print(json.dumps(detail.to_map(), indent=2, ensure_ascii=False))
-            sys.exit(1)
-
-        # 状态为 Waiting / Running / Deploying 等，继续等待
-        time.sleep(POLL_INTERVAL_SEC)
-        elapsed += POLL_INTERVAL_SEC
-
-    print(f"❌ Deployment timed out after {POLL_TIMEOUT_SEC}s. Check DataWorks console.")
-    sys.exit(1)
-
-
 def main():
-    # ── 解析命令行参数 ──────────────────────────────────────
-    parser = argparse.ArgumentParser(description="Publish DataWorks Node to Production")
+    parser = argparse.ArgumentParser(description="Publish DataWorks Node to Production using Pipeline API")
     parser.add_argument(
         "--project-dir", type=str, default="projects/Test",
-        help="项目目录路径（需包含 task-config.json）"
-    )
-    parser.add_argument(
-        "--comment", type=str, default="Auto-publish by GitHub Actions",
-        help="发布备注"
+        help="项目目录路径（由于我们已引入 global.json，直接传所在环境目录即可）"
     )
     args = parser.parse_args()
 
-    # ── 读取节点名 ──────────────────────────────────────────
-    config_path = Path(args.project_dir) / "task-config.json"
-    if not config_path.exists():
-        print(f"ERROR: task-config.json not found in {args.project_dir}")
+    # ── 1. 读取配置（支持 global.json 提取） ───────────────────────
+    try:
+        config = load_merged_node_config(args.project_dir)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
         sys.exit(1)
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
-    node_name = config["node_name"]
+        
+    node_name = config.get("node_name")
+    if not node_name:
+        print(f"ERROR: node_name not found in configuration.")
+        sys.exit(1)
 
-    # ── 读取工作空间 ID ─────────────────────────────────────
+    # ── 2. 读取工作空间 ID ─────────────────────────────────────
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
     if not project_id_str:
         print("ERROR: DATAWORKS_PROJECT_ID not set")
         sys.exit(1)
     project_id = int(project_id_str)
 
-    # ── 初始化客户端 ────────────────────────────────────────
     client = create_client()
-    print(f"🚀 Publishing node '{node_name}' in project {project_id}...")
+    print(f"\n{'='*50}")
+    print(f"🚀 [PUBLISH] 开始将节点 '{node_name}' 发布到生产环境")
+    print(f"{'='*50}")
 
-    # ── 执行三步发布流程 ────────────────────────────────────
-    file_id = get_file_id(client, project_id, node_name)
-    deployment_id = submit_file(client, project_id, file_id, args.comment)
-    wait_for_deployment(client, project_id, deployment_id)
+    # ── 3. 获取真实节点 ID ─────────────────────────────────────
+    node_file_id = get_node_id(client, project_id, node_name)
+    if not node_file_id:
+        print(f"❌ 查无此节点 '{node_name}'，请先运行 create_node 部署流程。")
+        sys.exit(1)
+    print(f"✅ 获取到节点的真实 ID: {node_file_id}")
 
-    print(f"\n🎉 Node '{node_name}' has been published to production environment.")
+    # ── 4. 触发 CreatePipelineRun ──────────────────────────────
+    print(f"\n[INIT] 正在创建发布流水线...")
+    pipeline_req = dw_models.CreatePipelineRunRequest(
+        type='Online',
+        project_id=project_id,
+        object_ids=[str(node_file_id)]
+    )
+    
+    try:
+        resp = client.create_pipeline_run_with_options(pipeline_req, util_models.RuntimeOptions())
+        pipeline_run_id = resp.body.id
+        print(f"✅ 成功创建发布流水线, 流水线 ID: {pipeline_run_id}")
+    except Exception as e:
+        print(f"❌ 创建流水线失败: {e}")
+        sys.exit(1)
+        
+    # 为避免流水线初始化延迟
+    time.sleep(3)
 
+    # ── 5. 顺序执行三个标准发布阶段 ────────────────────────────
+    stages = ["BUILD_PACKAGE", "PROD_CHECK", "PROD"]
+    for idx, stage in enumerate(stages, 1):
+        print(f"\n[STAGE {idx}/{len(stages)}] 正在执行 {stage} ...")
+        
+        stage_req = dw_models.ExecPipelineRunStageRequest(
+            project_id=project_id,
+            id=pipeline_run_id,
+            code=stage
+        )
+        
+        # 带有重试机制的推进器
+        max_retries = 3
+        success = False
+        for attempt in range(max_retries):
+            try:
+                client.exec_pipeline_run_stage_with_options(stage_req, util_models.RuntimeOptions())
+                success = True
+                
+                # 等待阶段真实下发执行
+                wait_time = 10 if stage == "PROD_CHECK" else 5
+                for i in range(wait_time):
+                    print(".", end="", flush=True)
+                    time.sleep(1)
+                print(" ✅ 已触发且执行通过")
+                break
+                
+            except Exception as e:
+                msg = str(e)
+                if "Failed" in msg or "not finish" in msg.lower() or "dependent" in msg.lower():
+                    print(f"\n   [WARN] 触发出错 (可能是上一个阶段尚未完全结束): {msg}")
+                    if attempt < max_retries - 1:
+                        print("   等待 5 秒后重试...")
+                        time.sleep(5)
+                else:
+                    print(f"\n❌ 执行阶段 {stage} 发生异常: {msg}")
+                    sys.exit(1)
+                    
+        if not success:
+            print(f"\n❌ 阶段 {stage} 重试 {max_retries} 次仍失败，退出发布流程。请去控制台排查错误日志。")
+            sys.exit(1)
+
+    print(f"\n🎉 恭喜，节点 '{node_name}' 已成功发布到生产环境！\n")
 
 if __name__ == "__main__":
     main()
