@@ -43,7 +43,8 @@ def main():
     """
 
     print(f"Executing SQL:\n{sql}")
-    inst = o.execute_sql(sql)
+    # hints: allow full scan on partitioned tables (needed when no partition predicate is specified)
+    inst = o.execute_sql(sql, hints={'odps.sql.allow.fullscan': 'true'})
 
     with inst.open_reader() as reader:
         results = {row['source']: row['row_count'] for row in reader}
