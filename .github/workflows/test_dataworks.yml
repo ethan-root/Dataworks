@@ -15,6 +15,15 @@ on:
           - clean_mc_tables
           - create_oss_ds
           - create_mc_ds
+          - validate_row_count
+      ext_table:
+        description: '外部表名（OSS Parquet 外表）'
+        required: false
+        default: 'val_feature_demo_ext'
+      int_table:
+        description: '内部表名（MaxCompute 内表）'
+        required: false
+        default: 'user'
       project_dir:
         description: '功能目录'
         required: false
@@ -77,3 +86,10 @@ jobs:
       - name: Create MaxCompute DataSource
         if: ${{ github.event.inputs.action == 'create_mc_ds' }}
         run: python scripts/create_mc_ds.py --project-dir ${{ github.event.inputs.project_dir }}/${{ github.event.inputs.env_name }}
+
+      - name: Validate Row Count (External vs Internal Table)
+        if: ${{ github.event.inputs.action == 'validate_row_count' }}
+        run: |
+          python scripts/validate_row_count.py \
+            --ext-table ${{ github.event.inputs.ext_table }} \
+            --int-table ${{ github.event.inputs.int_table }}
