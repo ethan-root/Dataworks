@@ -34,8 +34,8 @@ def print_table_data(o, table_name, label):
             if not rows:
                 print("  (空表，无数据)")
                 return
-            # 打印列名
-            cols = list(rows[0]._columns)
+            # 打印列名（pyodps 返回 TableColumn 对象，需取 .name）
+            cols = [col.name for col in rows[0]._columns]
             print("  " + " | ".join(cols))
             print("  " + "-" * (len(" | ".join(cols)) + 2))
             for row in rows:
