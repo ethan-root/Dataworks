@@ -1,0 +1,127 @@
+name: database_update
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "运行模式"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - plan
+          - apply
+      env_name:
+        description: "目标环境"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - qa
+          - pre-prod
+          - prod
+      project_name:
+        description: "功能名称(如 test-feature)"
+        required: true
+        default: "test-feature"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "feature/**/create-table.sql"
+      - "features/**/ddl/**"
+      - ".github/workflows/database_update.yml"
+
+env:
+  ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+  ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+  MAXCOMPUTE_PROJECT: ${{ secrets.MAXCOMPUTE_PROJECT }}
+  MAXCOMPUTE_ENDPOINT: ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+
+jobs:
+  plan:
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'plan') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Print changed DDL files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            git diff --name-only "$BASE" "$HEAD" | grep -E '^feature/.*/create-table\.sql|^features/.*/ddl/.*\.sql' || true
+          else
+            echo "Plan mode by manual trigger for project=${{ github.event.inputs.project_name }}, env=${{ github.event.inputs.env_name }}"
+          fi
+
+  apply:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Normalize DDL runtime directory
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FEATURE_NAME="${{ github.event.inputs.project_name }}"
+          ENV_NAME="${{ github.event.inputs.env_name }}"
+
+          RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
+          mkdir -p "$RUNTIME_DIR"
+
+          if [ -d "feature/${FEATURE_NAME}/${ENV_NAME}" ]; then
+            cp "feature/${FEATURE_NAME}/${ENV_NAME}/setting.json" "${RUNTIME_DIR}/setting.json"
+            cp "feature/${FEATURE_NAME}/${ENV_NAME}/create-table.sql" "${RUNTIME_DIR}/create-table.sql"
+          elif [ -d "features/${FEATURE_NAME}" ]; then
+            SRC_DIR="features/${FEATURE_NAME}"
+
+            ENV_FILE_CANDIDATE_1="${SRC_DIR}/setting-${ENV_NAME}.json"
+            ENV_FILE_CANDIDATE_2="${SRC_DIR}/setting-$(echo "$ENV_NAME" | sed 's/pre-prod/preprod/g').json"
+
+            if [ -f "$ENV_FILE_CANDIDATE_1" ]; then
+              cp "$ENV_FILE_CANDIDATE_1" "${RUNTIME_DIR}/setting.json"
+            elif [ -f "$ENV_FILE_CANDIDATE_2" ]; then
+              cp "$ENV_FILE_CANDIDATE_2" "${RUNTIME_DIR}/setting.json"
+            else
+              echo "Missing setting file for env=${ENV_NAME}"
+              exit 1
+            fi
+
+            DDL_FILE="$(ls -1 "${SRC_DIR}"/ddl/*.sql 2>/dev/null | sort | tail -n 1 || true)"
+            if [ -z "$DDL_FILE" ]; then
+              echo "No DDL SQL found under ${SRC_DIR}/ddl"
+              exit 1
+            fi
+            cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
+          else
+            echo "Project not found in feature/ or features/"
+            exit 1
+          fi
+
+          echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
+
+      - name: Execute DDL via existing create_table script
+        run: |
+          python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}"
