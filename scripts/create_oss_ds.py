@@ -47,8 +47,8 @@ def main():
 
     # DataWorks 创建 OSS 数据源要求传入 Endpoint 和 AK/SK 以及 Region等必填信息
     connection_properties = {
-        "endpoint": ds_config["endpoint"],
-        "bucket": ds_config["bucket"],
+        "endpoint": config["endpoint"],
+        "bucket": config["bucket"],
         "authType": "Ak", # Ak 代表使用 AccessKey 认证
         "accessId": ak,
         "accessKey": sk,

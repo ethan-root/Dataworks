@@ -53,7 +53,7 @@ def main():
     # MaxCompute (odps) 数据源在同账号下可以主要靠 envType, project。
     # 我们测试仅传入必要的核心参数，规避由于字段格式或枚举不支持导致的 HTTP 400 错误。
     connection_properties = {
-        "project": ds_config["project"],
+        "project": config["project"],
         "envType": "Prod",
         "regionId": region,
         "endpointMode": "SelfAdaption"  # 控制台界面的“自动适配”
