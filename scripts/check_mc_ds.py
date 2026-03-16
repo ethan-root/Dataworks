@@ -53,6 +53,33 @@ def _extract_data_sources(resp_body):
 
     return []
 
+
+def _find_datasource(client, project_id: int, ds_name: str):
+    """先按 name 查询，若未命中再走不带 name 的全量兜底查询。"""
+    runtime = util_models.RuntimeOptions()
+
+    req_by_name = dw_models.ListDataSourcesRequest(
+        project_id=project_id,
+        name=ds_name
+    )
+    resp = client.list_data_sources_with_options(req_by_name, runtime)
+    sources = _extract_data_sources(resp.body)
+
+    for ds in sources:
+        name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
+        if name == ds_name:
+            return ds
+
+    req_all = dw_models.ListDataSourcesRequest(project_id=project_id)
+    resp_all = client.list_data_sources_with_options(req_all, runtime)
+    all_sources = _extract_data_sources(resp_all.body)
+    for ds in all_sources:
+        name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
+        if name == ds_name:
+            return ds
+
+    return None
+
 def main():
     parser = argparse.ArgumentParser(description="Check DataWorks MaxCompute DataSource")
     parser.add_argument(
@@ -81,27 +108,14 @@ def main():
     print(f"Checking MaxCompute DataSource '{ds_name}' in Project {project_id}...")
     
     client = create_client()
-    request = dw_models.ListDataSourcesRequest(
-        project_id=project_id,
-        name=ds_name
-    )
     
     try:
-        resp = client.list_data_sources_with_options(request, util_models.RuntimeOptions())
-        data_sources = _extract_data_sources(resp.body)
-        
-        found = False
-        for ds in data_sources:
-            name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
-            ds_id = ds.get("id", "Unknown") if isinstance(ds, dict) else getattr(ds, "id", "Unknown")
-            if name == ds_name:
-                print(f"✅ MaxCompute DataSource '{ds_name}' exists. ID: {ds_id}")
-                found = True
-                break
-                
-        if not found:
+        ds = _find_datasource(client, project_id, ds_name)
+        if ds is None:
             print(f"❌ MaxCompute DataSource '{ds_name}' does not exist (not found in list).")
             sys.exit(1)
+        ds_id = ds.get("id", "Unknown") if isinstance(ds, dict) else getattr(ds, "id", "Unknown")
+        print(f"✅ MaxCompute DataSource '{ds_name}' exists. ID: {ds_id}")
             
     except Exception as e:
         msg = e.message if hasattr(e, 'message') else str(e)
