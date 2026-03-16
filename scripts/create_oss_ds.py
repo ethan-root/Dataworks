@@ -69,26 +69,23 @@ def main():
     request = dw_models.CreateDataSourceRequest(
         project_id=project_id,
         name=config.get("name"),
-        data_source_type="oss",
+        type="oss",
         description=config.get("description", ""),
-        env_type=1,
         connection_properties_mode="UrlMode",
-        url=f"{config.get('endpoint')}",
-        # string 类型的 content 字段，存放 AK/SK 等凭证信息
-        content=json.dumps({
-            "accessId": ak,
-            "accessKey": sk,
-            "bucket": config.get("bucket"),
-            "endpoint": config.get("endpoint")
-        })
+        connection_properties=json.dumps(connection_properties, ensure_ascii=False)
     )
     
     try:
         resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
         print(f"✅ OSS DataSource Created successfully. ID: {resp.body.id}")
     except Exception as e:
-        print(f"Failed to create DataSource: {e.message if hasattr(e, 'message') else str(e)}")
-        # 注: 如果数据源已存在，API 通常会抛错，此处不终止运行。
+        msg = e.message if hasattr(e, 'message') else str(e)
+        # 与 "先检查后创建" 配合，若并发导致已存在则视为成功
+        if "already" in msg.lower() or "exist" in msg.lower():
+            print(f"ℹ️ OSS DataSource may already exist: {msg}")
+            return
+        print(f"❌ Failed to create DataSource: {msg}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
