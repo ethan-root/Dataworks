@@ -82,6 +82,15 @@ def main():
         print(f"✅ MaxCompute DataSource Created successfully. ID: {resp.body.id}")
     except Exception as e:
         msg = e.message if hasattr(e, 'message') else str(e)
+        if (
+            "already" in msg.lower()
+            or "exist" in msg.lower()
+            or "已存在" in msg
+            or "重复" in msg
+            or "名称重复" in msg
+        ):
+            print(f"ℹ️ MaxCompute DataSource may already exist: {msg}")
+            return
         print(f"❌ Failed to create DataSource: {msg}")
         sys.exit(1)
 

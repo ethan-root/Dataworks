@@ -80,8 +80,14 @@ def main():
         print(f"✅ OSS DataSource Created successfully. ID: {resp.body.id}")
     except Exception as e:
         msg = e.message if hasattr(e, 'message') else str(e)
-        # 与 "先检查后创建" 配合，若并发导致已存在则视为成功
-        if "already" in msg.lower() or "exist" in msg.lower():
+        # 与 "先检查后创建" 配合，若并发/接口漏检导致已存在则视为成功
+        if (
+            "already" in msg.lower()
+            or "exist" in msg.lower()
+            or "已存在" in msg
+            or "重复" in msg
+            or "名称重复" in msg
+        ):
             print(f"ℹ️ OSS DataSource may already exist: {msg}")
             return
         print(f"❌ Failed to create DataSource: {msg}")
