@@ -19,6 +19,42 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from dataworks_client import create_client
 from config_merger import load_merged_oss_ds_config
 
+
+def _extract_data_sources(resp_body):
+    """兼容不同 SDK 返回结构，安全提取 data source 列表。"""
+    if not resp_body:
+        return []
+
+    direct = getattr(resp_body, "data_sources", None)
+    if isinstance(direct, list):
+        return direct
+
+    nested = getattr(resp_body, "data", None)
+    if nested is not None:
+        nested_sources = getattr(nested, "data_sources", None)
+        if isinstance(nested_sources, list):
+            return nested_sources
+
+    # 最后回退到 map 结构兜底，避免模型字段名差异
+    try:
+        body_map = resp_body.to_map()
+    except Exception:
+        body_map = {}
+
+    for key in ("dataSources", "data_sources"):
+        val = body_map.get(key)
+        if isinstance(val, list):
+            return val
+
+    data_map = body_map.get("data")
+    if isinstance(data_map, dict):
+        for key in ("dataSources", "data_sources"):
+            val = data_map.get(key)
+            if isinstance(val, list):
+                return val
+
+    return []
+
 def main():
     parser = argparse.ArgumentParser(description="Check DataWorks OSS DataSource")
     parser.add_argument(
@@ -54,12 +90,15 @@ def main():
     
     try:
         resp = client.list_data_sources_with_options(request, util_models.RuntimeOptions())
-        data_sources = resp.body.data_sources if hasattr(resp.body, "data_sources") else getattr(resp.body.data, "data_sources", [])
+        data_sources = _extract_data_sources(resp.body)
         
         found = False
         for ds in data_sources:
-            if getattr(ds, "name", "") == ds_name:
-                print(f"✅ OSS DataSource '{ds_name}' exists. ID: {getattr(ds, 'id', 'Unknown')}")
+            # ds 可能是模型对象或 dict，统一兼容读取
+            name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
+            ds_id = ds.get("id", "Unknown") if isinstance(ds, dict) else getattr(ds, "id", "Unknown")
+            if name == ds_name:
+                print(f"✅ OSS DataSource '{ds_name}' exists. ID: {ds_id}")
                 found = True
                 break
                 
