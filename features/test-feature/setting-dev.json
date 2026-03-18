@@ -13,6 +13,7 @@
     },
     "task": {
         "node_name": "update_task_ci_test_01",
+        "description": "trigger github actions",
         "cron": "00 10 00-23/1 * * ?",
         "reader_datasource": "oss_demo_ci_test_01",
         "reader_path": "parquet/*.parquet",
