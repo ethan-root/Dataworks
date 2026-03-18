@@ -34,22 +34,25 @@ def _extract_data_sources(resp_body):
         if isinstance(nested_sources, list):
             return nested_sources
 
+    # 第二种可能：返回体就是一个字典（部分版本 SDK）
     try:
         body_map = resp_body.to_map()
     except Exception:
-        body_map = {}
+        body_map = resp_body if isinstance(resp_body, dict) else {}
 
-    for key in ("dataSources", "data_sources"):
-        val = body_map.get(key)
-        if isinstance(val, list):
-            return val
-
-    data_map = body_map.get("data")
+    # 从 data 嵌套字典提取
+    data_map = body_map.get("data", {})
     if isinstance(data_map, dict):
         for key in ("dataSources", "data_sources"):
             val = data_map.get(key)
             if isinstance(val, list):
                 return val
+
+    # 防止外层就有数据
+    for key in ("dataSources", "data_sources"):
+        val = body_map.get(key)
+        if isinstance(val, list):
+            return val
 
     return []
 
@@ -70,13 +73,17 @@ def _find_datasource(client, project_id: int, ds_name: str):
         if name == ds_name:
             return ds
 
-    req_all = dw_models.ListDataSourcesRequest(project_id=project_id)
-    resp_all = client.list_data_sources_with_options(req_all, runtime)
-    all_sources = _extract_data_sources(resp_all.body)
-    for ds in all_sources:
-        name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
-        if name == ds_name:
-            return ds
+    # 部分环境下 name 过滤可能漏检，兜底做一次无 filter 全量查询
+    try:
+        req_all = dw_models.ListDataSourcesRequest(project_id=project_id, page_size=100)
+        resp_all = client.list_data_sources_with_options(req_all, runtime)
+        all_sources = _extract_data_sources(resp_all.body)
+        for ds in all_sources:
+            name = ds.get("name", "") if isinstance(ds, dict) else getattr(ds, "name", "")
+            if name == ds_name:
+                return ds
+    except Exception as e:
+        print(f"WARN: Fallback list all data sources failed: {e}")
 
     return None
 
