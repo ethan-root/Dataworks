@@ -45,13 +45,19 @@ def main():
     args = parser.parse_args()
 
     # ── 读取 SQL 文件 ─────────────────────────────────────────────
-    sql_path = Path(args.project_dir) / "create-table.sql"
-    if not sql_path.exists():
-        print(f"ERROR: create-table.sql not found in {args.project_dir}")
-        sys.exit(1)
+    legacy_sql_path = Path(args.project_dir) / "create-table.sql"
+    if legacy_sql_path.exists():
+        sql_path = legacy_sql_path
+    else:
+        sql_dir = Path(args.project_dir) / "ddl"
+        sql_files = list(sql_dir.glob("*.sql")) if sql_dir.exists() else []
+        if not sql_files:
+            print(f"ERROR: No .sql DDL script found in {args.project_dir} or {sql_dir}")
+            sys.exit(1)
+        sql_path = sorted(sql_files)[-1]
 
     ddl = sql_path.read_text(encoding="utf-8").strip()
-    print(f"DDL:\n{ddl}\n")
+    print(f"DDL ({sql_path.name}):\n{ddl}\n")
 
     # ── 连接 MaxCompute ───────────────────────────────────────────
     # ODPS() 是 pyodps 的入口，等同于登录 MaxCompute
