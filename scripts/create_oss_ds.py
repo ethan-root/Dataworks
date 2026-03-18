@@ -23,14 +23,19 @@ def main():
     # ── 解析命令行参数 ────────────────────────────────────────────
     parser = argparse.ArgumentParser(description="Create DataWorks OSS DataSource")
     parser.add_argument(
-        "--project-dir", type=str, default="projects/Test",
-        help="项目目录路径，该目录下必须有 oss-datasource.json 文件（全局配置同目录）"
+        "--project-dir", type=str, required=True,
+        help="项目目录路径"
+    )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
     )
     args = parser.parse_args()
 
     # ── 读取 OSS 数据源配置（引入合并覆盖逻辑）───────────────
     try:
-        config = load_merged_oss_ds_config(args.project_dir)
+        # 获取配置
+        config = load_merged_oss_ds_config(args.project_dir, args.env)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         sys.exit(1)

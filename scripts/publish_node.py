@@ -24,14 +24,18 @@ from alibabacloud_tea_util import models as util_models
 def main():
     parser = argparse.ArgumentParser(description="Publish DataWorks Node to Production using Pipeline API")
     parser.add_argument(
-        "--project-dir", type=str, default="projects/Test",
-        help="项目目录路径（由于我们已引入 global.json，直接传所在环境目录即可）"
+        "--project-dir", type=str, required=True,
+        help="项目目录路径"
+    )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
     )
     args = parser.parse_args()
 
     # ── 1. 读取配置（支持 global.json 提取） ───────────────────────
     try:
-        config = load_merged_node_config(args.project_dir)
+        config = load_merged_node_config(args.project_dir, args.env)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         sys.exit(1)

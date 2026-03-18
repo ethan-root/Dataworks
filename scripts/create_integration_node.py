@@ -16,12 +16,13 @@ from pathlib import Path
 from dataworks_client import create_node, get_node_id, update_node
 from config_merger import load_merged_node_config
 
-def process_project(client, project_id: int, project_dir: str) -> None:
+def process_project(client, project_id: int, project_dir: str, env: str) -> None:
     """
     以 Upsert 方式处理单个功能目录：节点存在则更新，不存在则创建。
     （保留此函数用于向后兼容 deploy.py）
     """
-    config = load_merged_node_config(project_dir)
+    # 1. 加载合并后配置
+    config = load_merged_node_config(project_dir, env)
     node_name = config["node_name"]
     print(f"\n{'='*50}")
     print(f"Processing (Upsert): {node_name}  (dir: {project_dir})")
@@ -66,6 +67,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--project-dir", type=str, required=True,
         help="项目目录路径"
+    )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
     )
     args = parser.parse_args()
 

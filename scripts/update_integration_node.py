@@ -15,8 +15,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from dataworks_client import create_client, get_node_id, update_node
 from config_merger import load_merged_node_config
 
-def update_project(client, project_id: int, project_dir: str) -> None:
-    config = load_merged_node_config(project_dir)
+def update_project(client, project_id: int, project_dir: str, args) -> None: # 1. 加载合并后的目标配置
+    config = load_merged_node_config(args.project_dir, args.env)
     node_name = config["node_name"]
     print(f"\n{'='*50}")
     print(f"Updating Node: {node_name}  (dir: {project_dir})")
@@ -37,6 +37,10 @@ def main():
     parser.add_argument(
         "--project-dir", type=str, required=True,
         help="项目目录路径"
+    )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
     )
     args = parser.parse_args()
 

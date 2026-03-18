@@ -1,0 +1,23 @@
+{
+    "datasource": {
+        "oss": {
+            "name": "oss_gucci",
+            "bucket": "kering-gucci-data",
+            "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com"
+        },
+        "mc": {
+            "name": "odps_gucci",
+            "project": "gucci_mc_project",
+            "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
+        }
+    },
+    "task": {
+        "node_name": "gucci_integration_task",
+        "cron": "00 00 02 * * ?",
+        "reader_datasource": "oss_gucci",
+        "reader_path": "data/export/*.csv",
+        "writer_datasource": "odps_gucci",
+        "writer_table": "Item",
+        "writer_partition": "pt='${bizdate}'"
+    }
+}

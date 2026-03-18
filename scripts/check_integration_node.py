@@ -21,6 +21,10 @@ def main():
         "--project-dir", type=str, required=True,
         help="项目目录路径"
     )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
+    )
     args = parser.parse_args()
 
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
@@ -30,7 +34,8 @@ def main():
     project_id = int(project_id_str)
 
     try:
-        config = load_merged_node_config(args.project_dir)
+        # 1. 加载合并后配置（包含 global.json 注入的节点名称）
+        config = load_merged_node_config(args.project_dir, args.env)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         sys.exit(1)

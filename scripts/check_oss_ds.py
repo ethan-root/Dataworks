@@ -89,10 +89,15 @@ def main():
         "--project-dir", type=str, required=True,
         help="项目目录路径"
     )
+    parser.add_argument(
+        "--env", type=str, required=True,
+        help="环境名称"
+    )
     args = parser.parse_args()
 
     try:
-        config = load_merged_oss_ds_config(args.project_dir)
+    # 获取配置
+        config = load_merged_oss_ds_config(args.project_dir, args.env)
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         sys.exit(1)
