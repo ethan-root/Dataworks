@@ -1,23 +1,23 @@
 {
     "datasource": {
         "oss": {
-            "name": "oss_demo",
+            "name": "oss_demo_ci_test_01",
             "bucket": "parquet-test1",
             "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com"
         },
         "mc": {
-            "name": "mc_demo",
+            "name": "mc_demo_ci_test_01",
             "project": "maxcompute_parquet_test",
             "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
         }
     },
     "task": {
-        "node_name": "update_task_3",
+        "node_name": "update_task_ci_test_01",
         "cron": "00 10 00-23/1 * * ?",
-        "reader_datasource": "oss_demo",
+        "reader_datasource": "oss_demo_ci_test_01",
         "reader_path": "parquet/*.parquet",
-        "writer_datasource": "mc_test_2",
-        "writer_table": "feature_test_2",
+        "writer_datasource": "mc_demo_ci_test_01",
+        "writer_table": "feature_demo_test_01",
         "writer_partition": "pt='${bizdate}'"
     }
 }
