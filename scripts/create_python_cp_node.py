@@ -15,7 +15,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_merger import merge_config
+from config_merger import load_merged_node_config
 import dataworks_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -120,7 +120,7 @@ def main():
         logger.error("Error: --node-type cp is deprecated. Use get_earliest_parquet.py / create_upstream_node.py instead.")
         sys.exit(1)
     
-    config = merge_config(args.project_dir, args.env)
+    config = load_merged_node_config(args.project_dir, args.env)
     
     create_dw_delete_node(config, args.project_dir, args.env)
 

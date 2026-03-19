@@ -19,7 +19,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_merger import merge_config
+from config_merger import load_merged_node_config
 from dataworks_client import create_client, get_node_id, update_node
 
 # import DataWorks public SDK models
@@ -218,7 +218,7 @@ def main():
     parser.add_argument("--env", required=True, help="环境名称 (如 dev, qa)")
     args = parser.parse_args()
     
-    config = merge_config(args.project_dir, args.env)
+    config = load_merged_node_config(args.project_dir, args.env)
     
     # 创建（或更新）DataWorks 下游节点
     create_dw_downstream_node(config, args.project_dir, args.env)
