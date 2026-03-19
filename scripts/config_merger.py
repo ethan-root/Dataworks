@@ -10,37 +10,44 @@ import json
 import re
 from pathlib import Path
 
-def _parse_columns_from_sql(filepath: Path) -> list:
-    """内部辅助：从 create-table.sql 中通过正则解析出所有的字段名（忽略分区字段）"""
+def _parse_all_columns_from_sqls(sql_dir: Path) -> list:
+    """内部辅助：从 ddl 目录下所有的 .sql 文件中汇总提取出所有的字段名"""
     columns = []
-    try:
-        content = filepath.read_text(encoding="utf-8")
-        # 提取 CREATE TABLE 括号内部的字段定义块
-        match = re.search(r'\((.*?)\)\s*(?:COMMENT|PARTITIONED)', content, re.IGNORECASE | re.DOTALL)
-        if not match:
-            # Fallback 如果没有 PARTITIONED 块
-            match = re.search(r'\((.*?)\)', content, re.IGNORECASE | re.DOTALL)
+    
+    sql_files = sorted(list(sql_dir.glob("*.sql"))) if sql_dir.exists() else []
+    
+    for filepath in sql_files:
+        try:
+            content = filepath.read_text(encoding="utf-8")
             
-        if match:
-            cols_block = match.group(1)
-            # 按行分割，提取每一行被反引号 ` 包裹的，或者首个单词作为列名
-            for line in cols_block.split('\n'):
-                line = line.strip()
-                if not line or line.startswith('--'):
-                    continue
-                # 尝试提取反引号的内容 `col_name`
-                col_match = re.search(r'`([^`]+)`', line)
-                if col_match:
-                    columns.append(col_match.group(1))
-                else:
-                    # 获取该行的第一个单词（非反引号情况）
-                    parts = line.split()
-                    if parts:
-                        col_name = parts[0].strip()
-                        if col_name.lower() not in ('primary', 'key', 'unique'):
+            # 使用一个稍微通用的正则找出字段块：
+            # 它可以匹配 `CREATE TABLE xxx (...)` 也可以匹配 `ALTER TABLE xxx ADD COLUMNS (...)`
+            matches = re.finditer(r'(?:CREATE\s+TABLE|ADD\s+COLUMNS)[^(]*\((.*?)\)(?:\s*(?:COMMENT|PARTITIONED|;|\Z)|$)', content, re.IGNORECASE | re.DOTALL)
+            
+            for match in matches:
+                cols_block = match.group(1)
+                # 解析 cols_block 里的列
+                for line in cols_block.split('\n'):
+                    line = line.strip()
+                    if not line or line.startswith('--') or line.startswith('//'):
+                        continue
+                        
+                    # 尝试提取反引号的内容 `col_name`
+                    col_match = re.search(r'`([^`]+)`', line)
+                    if col_match:
+                        col_name = col_match.group(1)
+                        if col_name not in columns:
                             columns.append(col_name)
-    except Exception as e:
-        print(f"   [WARN] Failed to parse SQL columns from {filepath.name}: {e}")
+                    else:
+                        # 获取该行的第一个单词
+                        parts = line.split()
+                        if parts:
+                            col_name = parts[0].strip()
+                            if col_name.lower() not in ('primary', 'key', 'unique') and col_name not in columns:
+                                columns.append(col_name)
+        except Exception as e:
+            print(f"   [WARN] Failed to parse SQL columns from {filepath.name}: {e}")
+            
     return columns
 
 def _load_json_silently(filepath: Path) -> dict:
@@ -112,11 +119,9 @@ def load_merged_node_config(project_dir: str, env: str = "dev") -> dict:
 
     # 4. 动态解析 ddl/*.sql 并注入字段映射
     sql_dir = Path(project_dir) / "ddl"
-    sql_files = list(sql_dir.glob("*.sql")) if sql_dir.exists() else []
-    if sql_files:
-        sql_path = sorted(sql_files)[-1]  # 假设使用最新的（或者这里可以按需调整逻辑）
-        columns = _parse_columns_from_sql(sql_path)
-        if columns and "reader" in config and "writer" in config:
+    columns = _parse_all_columns_from_sqls(sql_dir)
+    
+    if columns and "reader" in config and "writer" in config:
             # 构造 Reader mapping (默认转为 string 或 binary 取决于你的需求，这里默认用 BINARY 兼容 Parquet)
             reader_cols = []
             for idx, col in enumerate(columns):
