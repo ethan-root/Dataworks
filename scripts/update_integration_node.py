@@ -51,7 +51,7 @@ def main():
     project_id = int(project_id_str)
 
     client = create_client()
-    update_project(client, project_id, args.project_dir)
+    update_project(client, project_id, args.project_dir, args)
 
 if __name__ == "__main__":
     main()
