@@ -93,9 +93,90 @@ except Exception as e:
     raise e
 """
     
-    logger.info(f"DataWorks 分区清理节点已注册/更新: {node_name} (表: {table_name}, 保留个数: {retention_count})")
-    logger.debug(f"节点代码预览:\n{script_content}")
+    root_output = f"{config.get('metadata', {}).get('projectIdentifier', '')}_root"
+    if root_output == "_root":
+        root_output = f"{config.get('metadata', {}).get('projectId', '')}_root"
+        
+    spec_dict = {
+        "version": "1.1.0",
+        "kind": "CycleWorkflow",
+        "spec": {
+            "nodes": [
+                {
+                    "recurrence": "Normal",
+                    "maxInternalConcurrency": 0,
+                    "timeout": 0,
+                    "timeoutUnit": "HOURS",
+                    "instanceMode": "Immediately",
+                    "rerunMode": "Allowed",
+                    "rerunTimes": 0,
+                    "rerunInterval": 180000,
+                    "script": {
+                        "path": node_name,
+                        "language": "python3",
+                        "runtime": {
+                            "command": "PYTHON",
+                            "commandTypeId": 1322,
+                            "cu": "0.5"
+                        },
+                        "content": script_content
+                    },
+                    "trigger": {
+                        "type": "Scheduler",
+                        "cron": task_config.get("cron", "00 00 00-23/1 * * ?"),
+                        "cycleType": "NotDaily",
+                        "startTime": "1970-01-01 00:00:00",
+                        "endTime": "9999-01-01 00:00:00",
+                        "timezone": "Asia/Shanghai",
+                        "delaySeconds": 0
+                    },
+                    "runtimeResource": {
+                        "resourceGroup": config.get("resource_group", "")
+                    },
+                    "name": node_name,
+                    "owner": config.get("owner", "")
+                }
+            ],
+            "flow": [
+                {
+                    "depends": [
+                        {
+                            "type": "Normal",
+                            "output": root_output,
+                            "sourceType": "Manual"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
 
+    spec_json = json.dumps(spec_dict, ensure_ascii=False)
+    
+    ds_file_id = dataworks_client.get_node_id(client, project_id, node_name)
+    if ds_file_id:
+        logger.info(f"[UPDATE] Delete Node '{node_name}' already exists. Updating...")
+        dataworks_client.update_node(client, project_id, ds_file_id, spec_dict)
+    else:
+        logger.info(f"[CREATE] Delete Node '{node_name}' not found. Creating new node...")
+        from alibabacloud_dataworks_public20240518 import models as dw_models
+        from alibabacloud_tea_util import models as util_models
+        create_node_request = dw_models.CreateNodeRequest(
+            project_id=project_id,
+            spec=spec_json,
+            scene='DATAWORKS_PROJECT'
+        )
+        runtime = util_models.RuntimeOptions()
+        try:
+            client.create_node_with_options(create_node_request, runtime)
+            logger.info("✓ 创建成功！")
+        except Exception as error:
+            logger.error(f"✗ 创建失败: {error}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+            
+    logger.info(f"DataWorks 分区清理节点已注册/更新: {node_name} (表: {table_name}, 保留个数: {retention_count})")
 
 def main():
     parser = argparse.ArgumentParser(description="Create DataWorks Partition Delete Node")

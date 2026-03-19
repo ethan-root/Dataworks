@@ -398,7 +398,10 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
         node_id:    由 get_node_id() 返回的 NodeId
         config:     由 task-config.json 读取的配置字典
     """
-    local_spec  = json.loads(build_spec(config))
+    if config.get("version") == "1.1.0" and "spec" in config:
+        local_spec = config
+    else:
+        local_spec  = json.loads(build_spec(config))
     remote_spec = _get_remote_spec(client, project_id, node_id)
 
     print("\n   🔎 Comparing local config with remote node spec...")

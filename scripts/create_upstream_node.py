@@ -133,7 +133,17 @@ if __name__ == '__main__':
                     "owner": owner_id,
                 }
             ],
-            "flow": []
+            "flow": [
+                {
+                    "depends": [
+                        {
+                            "type": "Normal",
+                            "output": f"{config.get('metadata', {}).get('projectIdentifier', '')}_root" if config.get('metadata', {}).get('projectIdentifier') else f"{config.get('metadata', {}).get('projectId', '')}_root",
+                            "sourceType": "Manual"
+                        }
+                    ]
+                }
+            ]
         }
     }
     
