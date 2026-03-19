@@ -200,3 +200,135 @@ export MAXCOMPUTE_ENDPOINT="http://service.cn-shanghai.maxcompute.aliyun.com/api
 # 本地模拟一次 dev 环境部署（无需触发 GitHub Actions）
 python scripts/ci_runner.py --feature-list my-new-feature --env dev
 ```
+
+---
+
+## 📜 Scripts 脚本核心逻辑
+
+### 编排层
+
+#### `ci_runner.py` — 部署总指挥
+
+被 `_deploy_env.yml` 中的一行调用，封装了完整的创建/更新决策逻辑：
+
+```
+接收 --feature-list 和 --env 参数
+  └── 遍历每个 feature
+       ├── 校验目录和 setting-<env>.json 是否存在
+       ├── 调用 check_integration_node.py → 判断节点存在与否
+       │    ├── 节点已存在 → UPDATE 分支
+       │    │    └── update_integration_node.py → publish_node.py
+       │    └── 节点不存在 → CREATE 分支
+       │         ├── check/create OSS 数据源
+       │         ├── check/create MaxCompute 数据源
+       │         ├── create_table.py（建表 DDL）
+       │         ├── create_python_cp_node.py --node-type cp
+       │         ├── create_integration_node.py
+       │         ├── create_downstream_node.py
+       │         ├── create_python_cp_node.py --node-type delete
+       │         └── publish_node.py
+```
+
+---
+
+### 配置层
+
+#### `config_merger.py` — 配置合并引擎
+
+提供三个对外函数：
+
+| 函数 | 用途 |
+|---|---|
+| `load_merged_node_config(project_dir, env)` | 合并 `integration-config.json` + `setting-<env>.json[task]`，并从 `ddl/*.sql` 正则提取列名注入 Reader/Writer Column Array |
+| `load_merged_oss_ds_config(project_dir, env)` | 合并 `oss-datasource.json` + `setting-<env>.json[datasource.oss]` |
+| `load_merged_mc_ds_config(project_dir, env)` | 合并 `maxcompute-datasource.json` + `setting-<env>.json[datasource.mc]` |
+
+**Schema-Driven 字段映射**（`_parse_columns_from_sql`）：用正则从 `CREATE TABLE ... (...)` 括号内提取列名（支持反引号/无反引号），自动生成 OSS Reader 的 `BINARY` 类型列数组和 MaxCompute Writer 的列名数组。
+
+---
+
+### DataWorks API 层
+
+#### `dataworks_client.py` — SDK 统一封装
+
+| 函数 | 调用的 API | 说明 |
+|---|---|---|
+| `create_client()` | — | 从环境变量读取 AK/SK/Region，初始化客户端 |
+| `build_spec(config)` | — | 将配置 dict 转换为 DataWorks FlowSpec JSON（含调度、DI 任务、资源组）|
+| `create_node(...)` | `CreateNode` | 在工作空间创建新节点 |
+| `get_node_id(...)` | `ListFiles` | 用 `exact_file_name` 精确查找节点，返回 DataStudio `file_id` |
+| `update_node(...)` | `GetNode` + `UpdateNode` | 拉取远端 Spec → 本地重建 → 字段级 diff → 有差异才更新 |
+
+> **ID 区分**：DataWorks 节点有两个 ID，`file_id`（数据开发侧，用于 Update/Get）和 `node_id`（调度侧）。`get_node_id()` 返回的是 `file_id`。
+
+---
+
+### 节点操作脚本
+
+#### `check_integration_node.py`
+1. 从 `config_merger` 读取 `node_name`
+2. 调用 `get_node_id()` 精确查找
+3. **退出码约定**：找到 → `exit 0`；未找到 → `exit 1`（`ci_runner.py` 依赖此做 create/update 分支判断）
+
+#### `create_integration_node.py`
+1. 合并完整配置（含 Schema-Driven 字段映射）
+2. `build_spec()` 构建 FlowSpec JSON
+3. 调用 `CreateNode API` 创建节点
+
+#### `update_integration_node.py`
+1. 合并本地配置，`GetNode` 拉取远端当前 Spec
+2. 递归扁平化双方（`a.b.c[0].d → value`），打印字段级 diff 表格
+3. 仅当 `diff_count > 0` 时调用 `UpdateNode`，无变化时跳过
+
+---
+
+### 数据源操作脚本
+
+#### `check_oss_ds.py` / `check_mc_ds.py`
+- 调用 `ListDataSources` API，按名称匹配；处理多种嵌套响应结构，支持分页兜底
+- **退出码约定**：找到 → `exit 0`；未找到 → `exit 1`
+
+#### `create_oss_ds.py` / `create_mc_ds.py`
+- 合并底板配置后调用 `CreateDataSource` API
+- **幂等处理**：API 返回 HTTP 400 "名称重复" 时静默吸收，防止流水线因重复创建终止
+
+---
+
+### DDL 脚本
+
+#### `create_table.py`
+1. 在 `features/<name>/ddl/` 找最新 `*.sql`（按文件名时间戳排序取最后一个）
+2. 用 `pyodps` 的 `execute_sql()` 在 MaxCompute 执行 DDL
+3. SQL 包含 `IF NOT EXISTS`，天然幂等
+
+---
+
+### 发布脚本
+
+#### `publish_node.py` — 三阶段发布
+
+调用 DataWorks Deploy Pipeline API（`CreateDeployOrder`），三阶段执行：
+
+| 阶段 | 说明 |
+|---|---|
+| `BUILD_PACKAGE` | 打包节点，生成待发布制品 |
+| `PROD_CHECK` | 生产合规性校验（依赖关系、权限检查）|
+| `PROD` | 正式发布到生产调度环境 |
+
+轮询每个阶段状态，超时（每阶段最多 60 秒）或失败时终止并报错。
+
+---
+
+### 辅助/工具脚本
+
+#### `validate_row_count.py` — 行数对比验证（非流水线主流程）
+- 用 `SELECT COUNT(*) UNION ALL` 同时查询 OSS 外部表与 MaxCompute 内部表行数
+- 不一致时打印差异行数，返回非零退出码
+
+#### `clean_mc_tables.py` — MaxCompute 表清理（运维工具）
+- 列举项目下所有表，删除创建时间超过指定天数（默认 30 天）的表
+- 白名单保护（`WHITELIST_TABLES`）；`--execute` 标志控制真实删除，否则为 dry-run
+
+#### `deploy.py` — 旧版本地部署入口（已被 `ci_runner.py` 取代）
+- 早期版本的本地单次部署脚本，保留供参考，CI/CD 中不再使用
+
