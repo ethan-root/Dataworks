@@ -1,0 +1,46 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: (Manual) Deploy To Prod
+
+on: workflow_dispatch
+
+run-name: Deploy ${{ github.ref_name }} to prod
+
+env:
+  environment: prod
+  cluster: cus-prod
+  ARTIFACTORY_DOCKER_REGISTRY: ${{ vars.ARTIFACTORY_DOCKER_REGISTRY }}
+  ARTIFACTORY_DOCKER_REPO: ${{ vars.ARTIFACTORY_DOCKER_REPO }}
+  HELM_REPO: ${{ vars.HELM_REPO }}
+  VAULT_ADDRESS_PROD: ${{ vars.VAULT_ADDRESS_PROD }}
+  VAULT_GITHUB_ROLE: ${{ vars.VAULT_GITHUB_ROLE }}
+  VAULT_GITHUB_PATH: ${{ vars.VAULT_GITHUB_PATH }}
+  vars: ${{ toJSON(vars) }}
+  language: python
+
+jobs:
+  helm_update:
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on:
+      - kt-gu-cn
+    steps:
+      - name: Verify git tag
+        uses: kering-technologies-china/dso-cus-github-action/verify-git-tag@main
+      - name: Update tag
+        uses: kering-technologies-china/dso-cus-github-action/microservice/helm-update@main
+        with:
+          tag: ${{ env.tag }}
+          app-fullname: ${{ github.repository }}
+          cluster: ${{ env.cluster }}
+          env: ${{ env.environment }}
+      - name: Post deploy
+        uses: kering-technologies-china/dso-cus-github-action/post-deploy@main

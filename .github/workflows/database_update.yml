@@ -1,3 +1,16 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# database_update.yml  ·  MaxCompute DDL 执行流水线
+#
+# 触发条件：
+#   1. pull_request → main：PR 时执行 plan（打印变更文件列表，供 review 参考）
+#   2. workflow_dispatch(mode=plan)：手动 plan（查看会变更哪些 DDL）
+#   3. workflow_dispatch(mode=apply)：手动对单个环境执行 DDL
+#   4. workflow_dispatch(mode=apply_all)：一键串行执行所有环境（设计图标准流程）
+#                                        顺序：dev → qa → pre-prod → prod
+#                                        prod 环境需人工在 GitHub Environment 审批
+#
+# DDL 幂等保障：create_table.py 中使用 IF NOT EXISTS，重复执行不报错
+# ─────────────────────────────────────────────────────────────────────────────
 name: database_update
 
 on:
@@ -6,14 +19,15 @@ on:
       mode:
         description: "运行模式"
         required: true
-        default: "apply"
+        default: "plan"
         type: choice
         options:
-          - plan
-          - apply
+          - plan          # 仅显示将要变更的 DDL 文件，不执行
+          - apply         # 对指定 env_name 单独执行 DDL
+          - apply_all     # 串行执行所有环境: dev → qa → pre-prod → prod
       env_name:
-        description: "目标环境"
-        required: true
+        description: "目标环境（仅 apply 模式有效）"
+        required: false
         default: "dev"
         type: choice
         options:
@@ -22,7 +36,7 @@ on:
           - pre-prod
           - prod
       project_name:
-        description: "功能名称(如 test-feature)"
+        description: "功能名称 (如 test-feature)"
         required: true
         default: "test-feature"
 
@@ -35,59 +49,76 @@ on:
       - ".github/workflows/database_update.yml"
 
 env:
-  ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+  ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-  MAXCOMPUTE_PROJECT: ${{ secrets.MAXCOMPUTE_PROJECT }}
-  MAXCOMPUTE_ENDPOINT: ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+  MAXCOMPUTE_PROJECT:              ${{ secrets.MAXCOMPUTE_PROJECT }}
+  MAXCOMPUTE_ENDPOINT:             ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 可复用工具：标准化 DDL 目录（兼容旧目录结构）
+# ─────────────────────────────────────────────────────────────────────────────
+# 注：以下 normalize 步骤被多个 job 引用，通过 outputs 传递 project_dir
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job: plan  ·  打印 DDL 变更清单（PR 触发 或 手动 plan 触发）
+  # ─────────────────────────────────────────────────────────────────────────
   plan:
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'plan') }}
+    name: "📋 Plan - Show DDL Changes"
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'plan')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: "⬇️  Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Print changed DDL files
+      - name: "📋 Print changed DDL files"
         shell: bash
         run: |
           set -euo pipefail
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║  📋 DDL Plan - 变更影响分析                     ║"
+          echo "╚══════════════════════════════════════════════════╝"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
-            git diff --name-only "$BASE" "$HEAD" | grep -E '^feature/.*/create-table\.sql|^features/.*/ddl/.*\.sql' || true
+            CHANGED="$(git diff --name-only "$BASE" "$HEAD" \
+              | grep -E '^feature/.*/create-table\.sql|^features/.*/ddl/.*\.sql' || true)"
+            if [ -z "$CHANGED" ]; then
+              echo "  ℹ️  本次 PR 未涉及 DDL 变更。"
+            else
+              echo "  变更的 DDL 文件如下（请确保已通过 Dev 验证后再合并）："
+              echo "$CHANGED" | while read -r f; do echo "    🗂️  $f"; done
+            fi
           else
-            echo "Plan mode by manual trigger for project=${{ github.event.inputs.project_name }}, env=${{ github.event.inputs.env_name }}"
+            echo "  Plan mode（手动触发）: project=${{ github.event.inputs.project_name }}, env=${{ github.event.inputs.env_name }}"
           fi
 
-  apply:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply' }}
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job: apply-single  ·  单环境手动 DDL 执行（mode=apply）
+  # ─────────────────────────────────────────────────────────────────────────
+  apply-single:
+    name: "🔧 Apply DDL → ${{ github.event.inputs.env_name }}"
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.env_name }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - run: pip install -r scripts/requirements.txt
 
-      - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
-
-      - name: Normalize DDL runtime directory
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
           set -euo pipefail
-
           FEATURE_NAME="${{ github.event.inputs.project_name }}"
           ENV_NAME="${{ github.event.inputs.env_name }}"
-
           RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
           mkdir -p "$RUNTIME_DIR"
 
@@ -96,32 +127,158 @@ jobs:
             cp "feature/${FEATURE_NAME}/${ENV_NAME}/create-table.sql" "${RUNTIME_DIR}/create-table.sql"
           elif [ -d "features/${FEATURE_NAME}" ]; then
             SRC_DIR="features/${FEATURE_NAME}"
-
             ENV_FILE_CANDIDATE_1="${SRC_DIR}/setting-${ENV_NAME}.json"
             ENV_FILE_CANDIDATE_2="${SRC_DIR}/setting-$(echo "$ENV_NAME" | sed 's/pre-prod/preprod/g').json"
-
-            if [ -f "$ENV_FILE_CANDIDATE_1" ]; then
-              cp "$ENV_FILE_CANDIDATE_1" "${RUNTIME_DIR}/setting.json"
-            elif [ -f "$ENV_FILE_CANDIDATE_2" ]; then
-              cp "$ENV_FILE_CANDIDATE_2" "${RUNTIME_DIR}/setting.json"
-            else
-              echo "Missing setting file for env=${ENV_NAME}"
-              exit 1
-            fi
-
-            DDL_FILE="$(ls -1 "${SRC_DIR}"/ddl/*.sql 2>/dev/null | sort | tail -n 1 || true)"
-            if [ -z "$DDL_FILE" ]; then
-              echo "No DDL SQL found under ${SRC_DIR}/ddl"
-              exit 1
-            fi
+            if   [ -f "$ENV_FILE_CANDIDATE_1" ]; then cp "$ENV_FILE_CANDIDATE_1" "${RUNTIME_DIR}/setting.json"
+            elif [ -f "$ENV_FILE_CANDIDATE_2" ]; then cp "$ENV_FILE_CANDIDATE_2" "${RUNTIME_DIR}/setting.json"
+            else echo "Missing setting file for env=${ENV_NAME}"; exit 1; fi
+            DDL_FILE="$(ls -1 "${SRC_DIR}/ddl/"*.sql 2>/dev/null | sort | tail -n 1 || true)"
+            [ -z "$DDL_FILE" ] && { echo "No DDL SQL found under ${SRC_DIR}/ddl"; exit 1; }
             cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
           else
-            echo "Project not found in feature/ or features/"
-            exit 1
+            echo "Project not found: feature/${FEATURE_NAME} or features/${FEATURE_NAME}"; exit 1
           fi
-
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
 
-      - name: Execute DDL via existing create_table script
+      - name: "📄 Execute DDL"
         run: |
-          python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}"
+          python scripts/create_table.py \
+            --project-dir "${{ steps.normalize.outputs.project_dir }}" \
+            --env "${{ github.event.inputs.env_name }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Jobs: apply_all 串行模式 — Dev → QA → Pre-prod → Prod
+  # 设计图标准流程：一键触发，各环境顺序执行，prod 需人工审批
+  # ─────────────────────────────────────────────────────────────────────────
+  apply-dev:
+    name: "🟢 Apply DDL → DEV"
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      project_dir: ${{ steps.normalize.outputs.project_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r scripts/requirements.txt
+      - name: "🗂️  Normalize DDL directory"
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          FEATURE_NAME="${{ github.event.inputs.project_name }}"
+          ENV_NAME="dev"
+          RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
+          mkdir -p "$RUNTIME_DIR"
+          if [ -d "features/${FEATURE_NAME}" ]; then
+            SRC_DIR="features/${FEATURE_NAME}"
+            ENV_FILE="${SRC_DIR}/setting-${ENV_NAME}.json"
+            [ ! -f "$ENV_FILE" ] && { echo "Missing: $ENV_FILE"; exit 1; }
+            cp "$ENV_FILE" "${RUNTIME_DIR}/setting.json"
+            DDL_FILE="$(ls -1 "${SRC_DIR}/ddl/"*.sql 2>/dev/null | sort | tail -n 1 || true)"
+            [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
+            cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
+          else
+            echo "Project not found: features/${FEATURE_NAME}"; exit 1
+          fi
+          echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
+      - name: "📄 Execute DDL on DEV"
+        run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "dev"
+
+  apply-qa:
+    name: "🟡 Apply DDL → QA"
+    needs: apply-dev
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r scripts/requirements.txt
+      - name: "🗂️  Normalize DDL directory"
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          FEATURE_NAME="${{ github.event.inputs.project_name }}"
+          ENV_NAME="qa"
+          RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
+          mkdir -p "$RUNTIME_DIR"
+          SRC_DIR="features/${FEATURE_NAME}"
+          ENV_FILE="${SRC_DIR}/setting-${ENV_NAME}.json"
+          [ ! -f "$ENV_FILE" ] && { echo "Missing: $ENV_FILE"; exit 1; }
+          cp "$ENV_FILE" "${RUNTIME_DIR}/setting.json"
+          DDL_FILE="$(ls -1 "${SRC_DIR}/ddl/"*.sql 2>/dev/null | sort | tail -n 1 || true)"
+          [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
+          cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
+          echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
+      - name: "📄 Execute DDL on QA"
+        run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "qa"
+
+  apply-preprod:
+    name: "🟠 Apply DDL → PRE-PROD"
+    needs: apply-qa
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
+    runs-on: ubuntu-latest
+    environment: preprod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r scripts/requirements.txt
+      - name: "🗂️  Normalize DDL directory"
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          FEATURE_NAME="${{ github.event.inputs.project_name }}"
+          ENV_NAME="preprod"
+          RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
+          mkdir -p "$RUNTIME_DIR"
+          SRC_DIR="features/${FEATURE_NAME}"
+          ENV_FILE="${SRC_DIR}/setting-${ENV_NAME}.json"
+          [ ! -f "$ENV_FILE" ] && { echo "Missing: $ENV_FILE"; exit 1; }
+          cp "$ENV_FILE" "${RUNTIME_DIR}/setting.json"
+          DDL_FILE="$(ls -1 "${SRC_DIR}/ddl/"*.sql 2>/dev/null | sort | tail -n 1 || true)"
+          [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
+          cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
+          echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
+      - name: "📄 Execute DDL on PRE-PROD"
+        run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "preprod"
+
+  apply-prod:
+    name: "🔴 Apply DDL → PROD  🔒 (Requires Approval)"
+    needs: apply-preprod
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
+    runs-on: ubuntu-latest
+    environment: prod    # 需要 GitHub Environment → prod 配置审批人
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r scripts/requirements.txt
+      - name: "🗂️  Normalize DDL directory"
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          FEATURE_NAME="${{ github.event.inputs.project_name }}"
+          ENV_NAME="prod"
+          RUNTIME_DIR=".ci_runtime/feature/${FEATURE_NAME}/${ENV_NAME}"
+          mkdir -p "$RUNTIME_DIR"
+          SRC_DIR="features/${FEATURE_NAME}"
+          ENV_FILE="${SRC_DIR}/setting-${ENV_NAME}.json"
+          [ ! -f "$ENV_FILE" ] && { echo "Missing: $ENV_FILE"; exit 1; }
+          cp "$ENV_FILE" "${RUNTIME_DIR}/setting.json"
+          DDL_FILE="$(ls -1 "${SRC_DIR}/ddl/"*.sql 2>/dev/null | sort | tail -n 1 || true)"
+          [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
+          cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
+          echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
+      - name: "📄 Execute DDL on PROD"
+        run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "prod"
