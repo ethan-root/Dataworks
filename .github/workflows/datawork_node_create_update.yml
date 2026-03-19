@@ -1,36 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# datawork_node_create_update.yml  ·  DataWorks Node 创建/更新 主流水线
+#
+# 触发条件：main 分支有 features/** 目录下的文件变动时自动触发
+#
+# 执行流程：
+#   1. detect    — 扫描 git diff，识别本次推送涉及哪些 feature 文件夹发生了变化
+#   2. deploy-dev     — 部署到 DEV 环境
+#   3. deploy-qa      — 部署到 QA 环境（needs: deploy-dev）
+#   4. deploy-preprod — 部署到 PRE-PROD 环境（needs: deploy-qa）
+#   5. deploy-prod    — 部署到 PROD 环境（needs: deploy-preprod，需要人工审批）
+#
+# 每个 deploy-* 阶段的具体执行逻辑均委托给可复用工作流：
+#   .github/workflows/_deploy_env.yml
+# ─────────────────────────────────────────────────────────────────────────────
 name: datawork_node_create_update
 
+# ── 触发条件 ──────────────────────────────────────────────────────────────────
 on:
   push:
     branches:
       - main
     paths:
-      - "features/**"
+      - "features/**"   # 仅当 features/ 目录内容发生变化时才触发
 
-env:
-  DATAWORKS_PROJECT_ID: ${{ secrets.DATAWORKS_PROJECT_ID }}
-  ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-  ALIYUN_REGION: ${{ secrets.ALIYUN_REGION }}
-  MAXCOMPUTE_PROJECT: ${{ secrets.MAXCOMPUTE_PROJECT }}
-  MAXCOMPUTE_ENDPOINT: ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+# ── 全局 secrets（由各 deploy Job 通过 secrets: inherit 向下传递）──────────────
+# secrets 由 GitHub Repository → Settings → Secrets and variables 配置
+# 实际注入在 _deploy_env.yml 中通过 secrets: 字段完成
+# 此处无需声明全局 env，避免在 detect Job 中暴露敏感信息
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Job 0: Detect Check
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 0 · 检测变更 feature 列表
+  # 通过 git diff 扫描本次 push 涉及的 features/<name>/ 子目录
+  # ─────────────────────────────────────────────────────────────────────────
   detect:
-    name: Detect Changed Features
+    name: "🔍 Detect Changed Features"
     runs-on: ubuntu-latest
     outputs:
       feature_list: ${{ steps.resolve.outputs.feature_list }}
     steps:
-      - name: Checkout
+      - name: "⬇️  Checkout (full history)"
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          
-      - name: Resolve changed features
+          fetch-depth: 0    # 拉取完整历史，保证 git diff 能正确比对 BEFORE..AFTER
+
+      - name: "📋 Resolve changed features"
         id: resolve
         shell: bash
         run: |
@@ -39,11 +53,13 @@ jobs:
           BEFORE="${{ github.event.before }}"
           AFTER="${{ github.sha }}"
 
+          # 处理首次推送（BEFORE 为全零 SHA）的边界情况
           if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
           fi
 
-          # 提取 features/<name>/... 中的 <name> 层
+          # 2. 获取发生变更的集成节点名称
+          # 提取 features/<name>/... 中的 <name> 层作为 feature 标识
           CHANGED_FEATURES="$(
             git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null \
               | sed -n 's#^features/\([^/]*\)/.*#\1#p' \
@@ -51,288 +67,88 @@ jobs:
           )"
 
           if [ -z "$CHANGED_FEATURES" ]; then
-            echo "⚠️  No changed features detected under features/. Skipping."
+            echo "⚠️  features/ 目录下未检测到变更，跳过后续所有 deploy Job。"
             echo "feature_list=" >> "$GITHUB_OUTPUT"
           else
-            # 2. 获取发生变更的集成节点名称
-            echo "📋 Changed features detected:"
+            echo "📋 检测到变更的 feature(s):"
             echo "$CHANGED_FEATURES"
             FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
             echo "feature_list=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ─────────────────────────────────────────────────────────────
-  # Job 1: Deploy to DEV
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1 · 部署到 DEV 环境
+  # ─────────────────────────────────────────────────────────────────────────
   deploy-dev:
-    name: Deploy DEV
+    name: "🟢 Deploy → DEV"
     needs: detect
     if: needs.detect.outputs.feature_list != ''
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -r scripts/requirements.txt
-      - name: Execute DevOps workflow
-        env:
-          ENV_NAME: dev
-          FEATURE_LIST: ${{ needs.detect.outputs.feature_list }}
-        run: ./scripts/ci_deploy_loop.sh || bash -c 'echo "$FEATURE_LIST" | tr "," "\n" | while read F; do [ -z "$F" ] && continue; echo "Deploying $F"; bash -c "export FEATURE_NAME=$F; export ENV_NAME=$ENV_NAME; curl -s -o deploy.sh https://gist.githubusercontent.com/... && source deploy.sh"; done'
+    uses: ./.github/workflows/_deploy_env.yml
+    with:
+      env_name: "dev"
+      feature_list: ${{ needs.detect.outputs.feature_list }}
+    secrets:
+      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
+      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
+      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
+      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-      # 为了让代码整洁并复用 Bash 逻辑，我们在步骤里直接写脚本循环
-      - name: Run Deploy Script for DEV
-        shell: bash
-        run: |
-          set -euo pipefail
-          FEATURE_LIST="${{ needs.detect.outputs.feature_list }}"
-          ENV_NAME="dev"
-
-          echo "$FEATURE_LIST" | tr ',' '\n' | while read -r FEATURE_NAME; do
-            [ -z "$FEATURE_NAME" ] && continue
-            echo -e "\n╔══════════════════════════════════════════════════════════╗"
-            echo "║  Deploying Feature: ${FEATURE_NAME} | Env: ${ENV_NAME}"
-            echo "╚══════════════════════════════════════════════════════════╝"
-
-            PROJECT_DIR="features/${FEATURE_NAME}"
-            SETTING_FILE="${PROJECT_DIR}/setting-${ENV_NAME}.json"
-
-            if [ ! -d "$PROJECT_DIR" ] || [ ! -f "$SETTING_FILE" ]; then
-              echo "⚠️  Missing directory or $SETTING_FILE for feature '${FEATURE_NAME}'. Skipping..."
-              continue
-            fi
-
-            if python scripts/check_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-              echo -e "\n── [UPDATE WORKFLOW] 节点已存在，执行更新流程 ──"
-              # 3.2.1 获取已创建的数据集成节点的配置（已包含在 update 脚本内）
-              # 3.2.2 更新数据集成节点
-              python scripts/update_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            else
-              echo -e "\n── [CREATION WORKFLOW] 节点不存在，执行完整创建流程 ──"
-              # 3.1.1 检查 OSS 是否被创建，未创建则创建
-              if ! python scripts/check_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.2 检查 Maxcompute 数据源是否被创建，未创建则创建
-              if ! python scripts/check_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.3 创建 Maxcompute SQL表
-              python scripts/create_table.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.a (前置) 创建 Python 节点 (Copy Parquet File)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type cp
-              # 3.1.4 创建数据集成节点
-              python scripts/create_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.5 创建下游节点
-              python scripts/create_downstream_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.b (后置) 创建 Python 节点 (MaxCompute Data Delete)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type delete
-              # 3.1.7 发布节点
-              python scripts/publish_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            fi
-            echo "✅ Env: ${ENV_NAME} Feature: ${FEATURE_NAME} 处理完成。"
-          done
-
-  # ─────────────────────────────────────────────────────────────
-  # Job 2: Deploy to QA
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2 · 部署到 QA 环境（DEV 成功后自动触发）
+  # ─────────────────────────────────────────────────────────────────────────
   deploy-qa:
-    name: Deploy QA
+    name: "🟡 Deploy → QA"
     needs: [detect, deploy-dev]
     if: needs.detect.outputs.feature_list != ''
-    runs-on: ubuntu-latest
-    environment: qa
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -r scripts/requirements.txt
-      - name: Run Deploy Script for QA
-        shell: bash
-        run: |
-          set -euo pipefail
-          FEATURE_LIST="${{ needs.detect.outputs.feature_list }}"
-          ENV_NAME="qa"
+    uses: ./.github/workflows/_deploy_env.yml
+    with:
+      env_name: "qa"
+      feature_list: ${{ needs.detect.outputs.feature_list }}
+    secrets:
+      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
+      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
+      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
+      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-          echo "$FEATURE_LIST" | tr ',' '\n' | while read -r FEATURE_NAME; do
-            [ -z "$FEATURE_NAME" ] && continue
-            echo -e "\n╔══════════════════════════════════════════════════════════╗"
-            echo "║  Deploying Feature: ${FEATURE_NAME} | Env: ${ENV_NAME}"
-            echo "╚══════════════════════════════════════════════════════════╝"
-
-            PROJECT_DIR="features/${FEATURE_NAME}"
-            SETTING_FILE="${PROJECT_DIR}/setting-${ENV_NAME}.json"
-
-            if [ ! -d "$PROJECT_DIR" ] || [ ! -f "$SETTING_FILE" ]; then
-              echo "⚠️  Missing directory or $SETTING_FILE for feature '${FEATURE_NAME}'. Skipping..."
-              continue
-            fi
-
-            if python scripts/check_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-              echo -e "\n── [UPDATE WORKFLOW] 节点已存在，执行更新流程 ──"
-              # 3.2.1 获取已创建的数据集成节点的配置（已包含在 update 脚本内）
-              # 3.2.2 更新数据集成节点
-              python scripts/update_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            else
-              echo -e "\n── [CREATION WORKFLOW] 节点不存在，执行完整创建流程 ──"
-              # 3.1.1 检查 OSS 是否被创建，未创建则创建
-              if ! python scripts/check_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.2 检查 Maxcompute 数据源是否被创建，未创建则创建
-              if ! python scripts/check_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.3 创建 Maxcompute SQL表
-              python scripts/create_table.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.a (前置) 创建 Python 节点 (Copy Parquet File)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type cp
-              # 3.1.4 创建数据集成节点
-              python scripts/create_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.5 创建下游节点
-              python scripts/create_downstream_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.b (后置) 创建 Python 节点 (MaxCompute Data Delete)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type delete
-              # 3.1.7 发布节点
-              python scripts/publish_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            fi
-            echo "✅ Env: ${ENV_NAME} Feature: ${FEATURE_NAME} 处理完成。"
-          done
-
-  # ─────────────────────────────────────────────────────────────
-  # Job 3: Deploy to PRE-PROD
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3 · 部署到 PRE-PROD 环境（QA 成功后自动触发）
+  # ─────────────────────────────────────────────────────────────────────────
   deploy-preprod:
-    name: Deploy PRE-PROD
+    name: "🟠 Deploy → PRE-PROD"
     needs: [detect, deploy-qa]
     if: needs.detect.outputs.feature_list != ''
-    runs-on: ubuntu-latest
-    environment: pre-prod
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -r scripts/requirements.txt
-      - name: Run Deploy Script for PRE-PROD
-        shell: bash
-        run: |
-          set -euo pipefail
-          FEATURE_LIST="${{ needs.detect.outputs.feature_list }}"
-          ENV_NAME="preprod"
+    uses: ./.github/workflows/_deploy_env.yml
+    with:
+      env_name: "preprod"
+      feature_list: ${{ needs.detect.outputs.feature_list }}
+    secrets:
+      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
+      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
+      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
+      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-          echo "$FEATURE_LIST" | tr ',' '\n' | while read -r FEATURE_NAME; do
-            [ -z "$FEATURE_NAME" ] && continue
-            echo -e "\n╔══════════════════════════════════════════════════════════╗"
-            echo "║  Deploying Feature: ${FEATURE_NAME} | Env: ${ENV_NAME}"
-            echo "╚══════════════════════════════════════════════════════════╝"
-
-            PROJECT_DIR="features/${FEATURE_NAME}"
-            SETTING_FILE="${PROJECT_DIR}/setting-${ENV_NAME}.json"
-
-            if [ ! -d "$PROJECT_DIR" ] || [ ! -f "$SETTING_FILE" ]; then
-              echo "⚠️  Missing directory or $SETTING_FILE for feature '${FEATURE_NAME}'. Skipping..."
-              continue
-            fi
-
-            if python scripts/check_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-              echo -e "\n── [UPDATE WORKFLOW] 节点已存在，执行更新流程 ──"
-              # 3.2.1 获取已创建的数据集成节点的配置（已包含在 update 脚本内）
-              # 3.2.2 更新数据集成节点
-              python scripts/update_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            else
-              echo -e "\n── [CREATION WORKFLOW] 节点不存在，执行完整创建流程 ──"
-              # 3.1.1 检查 OSS 是否被创建，未创建则创建
-              if ! python scripts/check_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.2 检查 Maxcompute 数据源是否被创建，未创建则创建
-              if ! python scripts/check_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.3 创建 Maxcompute SQL表
-              python scripts/create_table.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.a (前置) 创建 Python 节点 (Copy Parquet File)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type cp
-              # 3.1.4 创建数据集成节点
-              python scripts/create_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.5 创建下游节点
-              python scripts/create_downstream_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.b (后置) 创建 Python 节点 (MaxCompute Data Delete)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type delete
-              # 3.1.7 发布节点
-              python scripts/publish_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            fi
-            echo "✅ Env: ${ENV_NAME} Feature: ${FEATURE_NAME} 处理完成。"
-          done
-
-  # ─────────────────────────────────────────────────────────────
-  # Job 4: Deploy to PROD (Requires Approval)
-  # ─────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 4 · 部署到 PROD 环境（需要 GitHub Environment 人工审批）
+  # 在 Settings → Environments → prod 中配置 Required Reviewers
+  # ─────────────────────────────────────────────────────────────────────────
   deploy-prod:
-    name: Deploy PROD
+    name: "🔴 Deploy → PROD  🔒 (Requires Approval)"
     needs: [detect, deploy-preprod]
     if: needs.detect.outputs.feature_list != ''
-    runs-on: ubuntu-latest
-    environment: prod
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -r scripts/requirements.txt
-      - name: Run Deploy Script for PROD
-        shell: bash
-        run: |
-          set -euo pipefail
-          FEATURE_LIST="${{ needs.detect.outputs.feature_list }}"
-          ENV_NAME="prod"
-
-          echo "$FEATURE_LIST" | tr ',' '\n' | while read -r FEATURE_NAME; do
-            [ -z "$FEATURE_NAME" ] && continue
-            echo -e "\n╔══════════════════════════════════════════════════════════╗"
-            echo "║  Deploying Feature: ${FEATURE_NAME} | Env: ${ENV_NAME}"
-            echo "╚══════════════════════════════════════════════════════════╝"
-
-            PROJECT_DIR="features/${FEATURE_NAME}"
-            SETTING_FILE="${PROJECT_DIR}/setting-${ENV_NAME}.json"
-
-            if [ ! -d "$PROJECT_DIR" ] || [ ! -f "$SETTING_FILE" ]; then
-              echo "⚠️  Missing directory or $SETTING_FILE for feature '${FEATURE_NAME}'. Skipping..."
-              continue
-            fi
-
-            # 3. 检查数据节点是否被创建（退出码 0 表示已存在）
-            if python scripts/check_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-              echo -e "\n── [UPDATE WORKFLOW] 节点已存在，执行更新流程 ──"
-              # 3.2.1 获取已创建的数据集成节点的配置（已包含在 update 脚本内）
-              # 3.2.2 更新数据集成节点
-              python scripts/update_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            else
-              echo -e "\n── [CREATION WORKFLOW] 节点不存在，执行完整创建流程 ──"
-              # 3.1.1 检查 OSS 是否被创建，未创建则创建
-              if ! python scripts/check_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_oss_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.2 检查 Maxcompute 数据源是否被创建，未创建则创建
-              if ! python scripts/check_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"; then
-                python scripts/create_mc_ds.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              fi
-              # 3.1.3 创建 Maxcompute SQL表
-              python scripts/create_table.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.a (前置) 创建 Python 节点 (Copy Parquet File)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type cp
-              # 3.1.4 创建数据集成节点
-              python scripts/create_integration_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.5 创建下游节点
-              python scripts/create_downstream_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-              # 3.1.6.b (后置) 创建 Python 节点 (MaxCompute Data Delete)
-              python scripts/create_python_cp_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME" --node-type delete
-              # 3.1.7 发布节点
-              python scripts/publish_node.py --project-dir "$PROJECT_DIR" --env "$ENV_NAME"
-            fi
-            echo "✅ Env: ${ENV_NAME} Feature: ${FEATURE_NAME} 处理完成。"
-          done
+    uses: ./.github/workflows/_deploy_env.yml
+    with:
+      env_name: "prod"
+      feature_list: ${{ needs.detect.outputs.feature_list }}
+    secrets:
+      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
+      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
+      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
+      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
