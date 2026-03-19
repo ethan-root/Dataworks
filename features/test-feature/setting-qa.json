@@ -18,6 +18,8 @@
         "reader_path": "parquet/*.parquet",
         "writer_datasource": "mc_test_2",
         "writer_table": "feature_test_2",
-        "writer_partition": "pt='${bizdate}'"
+        "writer_partition": "pt='${bizdate}'",
+        "reader_prefix": "camos/test_feature/",
+        "mc_partition_retention": 30
     }
 }

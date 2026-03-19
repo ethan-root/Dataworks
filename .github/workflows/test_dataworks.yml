@@ -18,6 +18,10 @@ on:
           - create_oss_ds
           - create_mc_ds
           - validate_row_count
+          - get_earliest_parquet
+          - create_upstream_node
+          - create_downstream_node
+          - create_delete_mc_node
       ext_table:
         description: '外部表名（OSS Parquet 外表）'
         required: false
@@ -103,3 +107,19 @@ jobs:
           python scripts/validate_row_count.py \
             --ext-table ${{ github.event.inputs.ext_table }} \
             --int-table ${{ github.event.inputs.int_table }}
+
+      - name: Get Earliest Parquet File (write state)
+        if: ${{ github.event.inputs.action == 'get_earliest_parquet' }}
+        run: python scripts/create_upstream_node.py --project-dir ${{ github.event.inputs.project_dir }} --env ${{ github.event.inputs.env_name }}
+
+      - name: Create Upstream Node
+        if: ${{ github.event.inputs.action == 'create_upstream_node' }}
+        run: python scripts/create_upstream_node.py --project-dir ${{ github.event.inputs.project_dir }} --env ${{ github.event.inputs.env_name }}
+
+      - name: Create Downstream Node
+        if: ${{ github.event.inputs.action == 'create_downstream_node' }}
+        run: python scripts/create_downstream_node.py --project-dir ${{ github.event.inputs.project_dir }} --env ${{ github.event.inputs.env_name }}
+
+      - name: Create Delete MC Node
+        if: ${{ github.event.inputs.action == 'create_delete_mc_node' }}
+        run: python scripts/create_python_cp_node.py --project-dir ${{ github.event.inputs.project_dir }} --env ${{ github.event.inputs.env_name }} --node-type delete

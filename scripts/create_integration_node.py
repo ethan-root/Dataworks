@@ -38,9 +38,9 @@ def process_project(client, project_id: int, project_dir: str, env: str) -> None
     print(f"Done: {node_name}\n")
 
 
-def create_project(client, project_id: int, project_dir: str) -> None:
+def create_project(client, project_id: int, project_dir: str, env: str) -> None:
     """仅创建逻辑"""
-    config = load_merged_node_config(project_dir)
+    config = load_merged_node_config(project_dir, env)
     node_name = config["node_name"]
     print(f"\n{'='*50}")
     print(f"Creating Node: {node_name}  (dir: {project_dir})")
@@ -81,5 +81,5 @@ if __name__ == "__main__":
     project_id = int(project_id_str)
 
     client = create_client()
-    create_project(client, project_id, args.project_dir)
+    create_project(client, project_id, args.project_dir, args.env)
 

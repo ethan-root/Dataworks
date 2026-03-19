@@ -103,40 +103,40 @@ def deploy_feature(feature_name: str, env: str) -> None:
         # ━━━ CREATE 分支 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         print("  ┌─ [CREATION WORKFLOW] 节点不存在，执行完整创建流程")
 
-        # 3.1.1 检查 OSS 是否被创建，未创建则创建
+        # 3.1.1 检查/创建 OSS 数据源
         _log_step(1, 7, "☁️  确保 OSS 数据源存在")
         if not _exists("check_oss_ds.py", common_args):
             _run("create_oss_ds.py", common_args)
         _log_done()
 
-        # 3.1.2 检查 MaxCompute 数据源是否被创建，未创建则创建
+        # 3.1.2 检查/创建 MaxCompute 数据源
         _log_step(2, 7, "🗄️  确保 MaxCompute 数据源存在")
         if not _exists("check_mc_ds.py", common_args):
             _run("create_mc_ds.py", common_args)
         _log_done()
 
-        # 3.1.3 创建 MaxCompute SQL 表（幂等，含 IF NOT EXISTS）
-        _log_step(3, 7, "📄 创建 MaxCompute 目标表（幂等）")
+        # 3.1.3 创建 MaxCompute 目标表（DDL Migration）
+        _log_step(3, 7, "📄 创建 MaxCompute 目标表（使用新版迁移逻辑）")
         _run("create_table.py", common_args)
         _log_done()
 
-        # 3.1.6.a (前置) 创建 Python 节点 - Copy Parquet File
-        _log_step(4, 7, "🐍 创建上游 Python 节点 (Copy Parquet File)")
-        _run("create_python_cp_node.py", common_args + ["--node-type", "cp"])
+        # 3.1.4 创建上游节点（获取最早 parquet 文件名并注入 CI/CD 环境）
+        _log_step(4, 7, "🐍 创建上游节点（获取最早 parquet 文件名）")
+        _run("create_upstream_node.py", common_args)
         _log_done()
 
-        # 3.1.4 创建数据集成节点
-        _log_step(5, 7, "🔗 创建数据集成节点")
+        # 3.1.5 创建数据集成节点
+        _log_step(5, 7, "🔗 创建数据集成节点（注入 parquet 文件名）")
         _run("create_integration_node.py", common_args)
         _log_done()
 
-        # 3.1.5 创建下游节点 (Parquet → completed)
-        _log_step(6, 7, "📤 创建下游节点 (Parquet → completed)")
+        # 3.1.6 创建下游节点 (Parquet 移动到 completed)
+        _log_step(6, 7, "📤 创建下游节点（移动 parquet 文件）")
         _run("create_downstream_node.py", common_args)
         _log_done()
 
-        # 3.1.6.b (后置) 创建 Python 节点 - MaxCompute Data Delete
-        _log_step(7, 7, "🐍 创建下游 Python 节点 (MaxCompute Data Delete)")
+        # 3.1.7 创建 Python 节点 - 分区清理
+        _log_step(7, 7, "🐍 创建 Python 节点（清理 MC 分区，按个数）")
         _run("create_python_cp_node.py", common_args + ["--node-type", "delete"])
         _log_done()
 

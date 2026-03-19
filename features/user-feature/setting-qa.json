@@ -18,6 +18,8 @@
         "reader_path": "data/export/*.csv",
         "writer_datasource": "odps_gucci",
         "writer_table": "Item",
-        "writer_partition": "pt='${bizdate}'"
+        "writer_partition": "pt='${bizdate}'",
+        "reader_prefix": "camos/user_feature/",
+        "mc_partition_retention": 30
     }
 }
