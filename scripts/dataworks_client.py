@@ -14,6 +14,8 @@ dataworks_client.py
 import json
 import os
 import sys
+import time
+import random
 
 # DataWorks 官方 Python SDK（2024-05-18 版本）
 from alibabacloud_dataworks_public20240518.client import Client as DataWorksPublicClient
@@ -55,6 +57,35 @@ def create_client() -> DataWorksPublicClient:
     config.endpoint = f"dataworks.{region}.aliyuncs.com"
 
     return DataWorksPublicClient(config)
+
+
+# ─────────────────────────────────────────────────────
+# 辅助函数：带退避重试的 API 调用器
+# ─────────────────────────────────────────────────────
+def _call_with_retry(func, *args, **kwargs):
+    """
+    包装 DataWorks API 调用，遇到 Throttling.Resource 限流时自动采用指数退避加随机抖动进行重试。
+    最大重试 4 次，延迟分别为 ~1s, ~2s, ~4s, ~8s
+    """
+    max_retries = 4
+    for i in range(max_retries):
+        try:
+            # 每次请求前默认停顿 0.5 秒缓解基础并发压力
+            time.sleep(0.5)
+            return func(*args, **kwargs)
+        except Exception as error:
+            msg = getattr(error, 'message', str(error))
+            code = getattr(error, 'code', '')
+            
+            # 判断是否为限流错误 ("Throttling", "9990040003" 或 HTTP 429)
+            is_throttled = ("Throttling" in msg) or ("9990040003" in msg) or ("429" in str(code))
+            
+            if is_throttled and i < max_retries - 1:
+                wait_time = (2 ** i) + random.uniform(0.1, 1.0)
+                print(f"   [WARN] API 限流 (Throttling.Resource)，等待 {wait_time:.2f}s 后进行第 {i+1} 次重试...")
+                time.sleep(wait_time)
+            else:
+                raise
 
 
 # ─────────────────────────────────────────────────────
@@ -224,7 +255,7 @@ def create_node(client: DataWorksPublicClient, config: dict, project_id: int) ->
 
     # 第三步：调用 API
     try:
-        resp = client.create_node_with_options(create_node_request, runtime)
+        resp = _call_with_retry(client.create_node_with_options, create_node_request, runtime)
         # 成功：打印返回结果（包含 NodeId）
         print(json.dumps(resp.body.to_map(), indent=2, ensure_ascii=False))
     except Exception as error:
@@ -260,7 +291,7 @@ def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str) 
         page_size=10,
     )
     try:
-        resp = client.list_files_with_options(request, util_models.RuntimeOptions())
+        resp = _call_with_retry(client.list_files_with_options, request, util_models.RuntimeOptions())
         files = (
             resp.body.data.files
             if (resp.body and resp.body.data and resp.body.data.files)
@@ -292,7 +323,7 @@ def _get_remote_spec(client: DataWorksPublicClient, project_id: int, node_id: in
     """
     try:
         request = dw_models.GetNodeRequest(project_id=project_id, id=node_id)
-        resp = client.get_node_with_options(request, util_models.RuntimeOptions())
+        resp = _call_with_retry(client.get_node_with_options, request, util_models.RuntimeOptions())
         node = resp.body.node
         if node and node.spec:
             return json.loads(node.spec)
@@ -420,7 +451,7 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
     runtime = util_models.RuntimeOptions()
 
     try:
-        resp = client.update_node_with_options(update_request, runtime)
+        resp = _call_with_retry(client.update_node_with_options, update_request, runtime)
         if resp.body.success:
             print(f"   ✅ Node updated successfully. (NodeId={node_id})")
         else:
