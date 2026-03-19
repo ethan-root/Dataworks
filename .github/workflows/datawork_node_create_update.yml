@@ -22,6 +22,12 @@ on:
       - main
     paths:
       - "features/**"   # 仅当 features/ 目录内容发生变化时才触发
+  workflow_dispatch:
+    inputs:
+      features:
+        description: '逗号分隔的 feature 列表，或者输入 "all" 来部署全部 features'
+        required: true
+        default: 'all'
 
 # ── 全局 secrets（由各 deploy Job 通过 secrets: inherit 向下传递）──────────────
 # secrets 由 GitHub Repository → Settings → Secrets and variables 配置
@@ -50,27 +56,35 @@ jobs:
         run: |
           set -euo pipefail
 
-          BEFORE="${{ github.event.before }}"
-          AFTER="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.features }}" = "all" ]; then
+              CHANGED_FEATURES="$(ls -1 features/ 2>/dev/null || echo "")"
+            else
+              CHANGED_FEATURES=$(echo "${{ github.event.inputs.features }}" | tr ',' '\n' | sed 's/^[ \t]*//;s/[ \t]*$//' | grep -v '^$')
+            fi
+          else
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
 
-          # 处理首次推送（BEFORE 为全零 SHA）的边界情况
-          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            BEFORE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            # 处理首次推送（BEFORE 为全零 SHA）的边界情况
+            if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BEFORE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            fi
+
+            # 2. 获取发生变更的集成节点名称
+            # 提取 features/<name>/... 中的 <name> 层作为 feature 标识
+            CHANGED_FEATURES="$(
+              git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null \
+                | sed -n 's#^features/\([^/]*\)/.*#\1#p' \
+                | sort -u
+            )"
           fi
 
-          # 2. 获取发生变更的集成节点名称
-          # 提取 features/<name>/... 中的 <name> 层作为 feature 标识
-          CHANGED_FEATURES="$(
-            git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null \
-              | sed -n 's#^features/\([^/]*\)/.*#\1#p' \
-              | sort -u
-          )"
-
           if [ -z "$CHANGED_FEATURES" ]; then
-            echo "⚠️  features/ 目录下未检测到变更，跳过后续所有 deploy Job。"
+            echo "⚠️  未检测到任何待部署的 feature，跳过后续所有 deploy Job。"
             echo "feature_list=" >> "$GITHUB_OUTPUT"
           else
-            echo "📋 检测到变更的 feature(s):"
+            echo "📋 待部署的 feature(s):"
             echo "$CHANGED_FEATURES"
             FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
             echo "feature_list=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
