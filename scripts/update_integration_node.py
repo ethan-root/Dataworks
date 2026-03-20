@@ -18,6 +18,19 @@ from config_merger import load_merged_node_config
 def update_project(client, project_id: int, project_dir: str, args) -> None: # 1. 加载合并后的目标配置
     config = load_merged_node_config(args.project_dir, args.env)
     node_name = config["node_name"]
+    
+    upstream_node_name = f"{node_name}_upstream"
+    upstream_node_id = get_node_id(client, project_id, upstream_node_name)
+    if upstream_node_id:
+        config["depends"] = [{
+            "type": "Normal",
+            "output": str(upstream_node_id),
+            "sourceType": "Manual",
+            "refTableName": upstream_node_name
+        }]
+    else:
+        print(f"   [WARN] Upstream node '{upstream_node_name}' not found. Dependency skipped.")
+
     print(f"\n{'='*50}")
     print(f"Updating Node: {node_name}  (dir: {project_dir})")
     print(f"{'='*50}")

@@ -82,7 +82,7 @@ def _load_ref_script() -> str:
 # Spec 构建
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_downstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
+def build_downstream_node_spec(node_config: dict, ak: str, sk: str, upstream_node_id: int, integration_node_id: int) -> tuple:
     """
     构建下游 Python 节点的 DataWorks FlowSpec dict。
 
@@ -97,6 +97,8 @@ def build_downstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
         node_config : 由 load_merged_downstream_config() 返回的扁平化配置 dict
         ak          : 阿里云 AccessKey ID（注入到节点脚本内容）
         sk          : 阿里云 AccessKey Secret（同上）
+        upstream_node_id : 上游赋值节点的 Node ID 
+        integration_node_id : 数据集成节点的 Node ID
 
     Returns:
         (spec_dict, node_name) 元组
@@ -115,14 +117,9 @@ def build_downstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
     cu              = str(node_config.get("cu",           "0.5"))
     language        = node_config.get("language",         "python3")
 
-    # ── 构建 flow.depends.output（指向数据集成节点的输出标识符）─────────
-    # ✅ Bug Fix #5: 安全的 fallback 拼接，不产生 "None.xxx"
-    if project_identifier:
-        upstream_di_output = f"{project_identifier}.{base_node_name}"
-    elif project_id_str:
-        upstream_di_output = f"{project_id_str}.{base_node_name}"
-    else:
-        logger.error("project_identifier 和 project_id 均为空，无法构造 flow.depends.output")
+    # ── 构建 flow.depends.output ──────────────────────────────────────
+    if not upstream_node_id or not integration_node_id:
+        logger.error("上游赋值节点或数据集成节点未创建，无法建立依赖。请先执行之前的 CI 步骤。")
         sys.exit(1)
 
     # 上游赋值节点的参数引用（文件名传递）
@@ -216,17 +213,21 @@ if __name__ == '__main__':
                     "owner": owner_id,
                 }
             ],
-            # 下游节点依赖数据集成节点（DI node），确保链路：
-            #   Upstream（获取文件名） → Integration（入库） → Downstream（移动文件）
+            # 下游节点依赖上游赋值节点和数据集成节点（DI node），确保链路完整
             "flow": [
                 {
                     "depends": [
                         {
                             "type":         "Normal",
-                            "output":       upstream_di_output,
+                            "output":       str(upstream_node_id),
                             "sourceType":   "Manual",
-                            # ✅ Bug Fix #10: 严格对齐参考脚本，补充 refTableName 字段
-                            "refTableName": upstream_di_output,
+                            "refTableName": f"{base_node_name}_upstream"
+                        },
+                        {
+                            "type":         "Normal",
+                            "output":       str(integration_node_id),
+                            "sourceType":   "Manual",
+                            "refTableName": base_node_name
                         }
                     ]
                 }
@@ -263,14 +264,17 @@ def create_dw_downstream_node(node_config: dict) -> None:
         sys.exit(1)
     project_id = int(project_id_str)
 
-    # ── 3. 构建 spec ─────────────────────────────────────────────────
-    spec_dict, node_name = build_downstream_node_spec(node_config, ak, sk)
+    # ── 3. 初始化 DataWorks 客户端并获取前置节点 ID ───────────────────
+    client = create_client()
+    base_node_name = node_config.get("node_name", "downstream_node")
+    upstream_node_id = get_node_id(client, project_id, f"{base_node_name}_upstream")
+    integration_node_id = get_node_id(client, project_id, base_node_name)
+
+    # ── 4. 构建 spec ─────────────────────────────────────────────────
+    spec_dict, node_name = build_downstream_node_spec(node_config, ak, sk, upstream_node_id, integration_node_id)
     spec_json = json.dumps(spec_dict, ensure_ascii=False)
 
     logger.info(f"开始 upsert 下游节点: {node_name}  (project_id={project_id})")
-
-    # ── 4. 初始化 DataWorks 客户端 ────────────────────────────────────
-    client = create_client()
 
     # ── 5. 检查节点是否已存在 ─────────────────────────────────────────
     ds_file_id = get_node_id(client, project_id, node_name)

@@ -95,9 +95,39 @@ except Exception as e:
     raise e
 """
     
-    root_output = f"{config.get('metadata', {}).get('projectIdentifier', '')}_root"
-    if root_output == "_root":
-        root_output = f"{config.get('metadata', {}).get('projectId', '')}_root"
+    base_node_name = task_config.get("node_name", "delete_node")
+    downstream_node_name = f"{base_node_name}_downstream"
+    integration_node_name = base_node_name
+    
+    downstream_node_id = dataworks_client.get_node_id(client, project_id, downstream_node_name)
+    integration_node_id = dataworks_client.get_node_id(client, project_id, integration_node_name)
+    
+    depends_list = []
+    if downstream_node_id:
+        depends_list.append({
+            "type": "Normal",
+            "output": str(downstream_node_id),
+            "sourceType": "Manual",
+            "refTableName": downstream_node_name
+        })
+    if integration_node_id:
+        depends_list.append({
+            "type": "Normal",
+            "output": str(integration_node_id),
+            "sourceType": "Manual",
+            "refTableName": integration_node_name
+        })
+        
+    # 如果都没找到，兜底使用 root
+    if not depends_list:
+        root_output = f"{config.get('metadata', {}).get('projectIdentifier', '')}_root"
+        if root_output == "_root":
+            root_output = f"{config.get('metadata', {}).get('projectId', '')}_root"
+        depends_list.append({
+            "type": "Normal",
+            "output": root_output,
+            "sourceType": "Manual"
+        })
         
     spec_dict = {
         "version": "1.1.0",
@@ -141,13 +171,7 @@ except Exception as e:
             ],
             "flow": [
                 {
-                    "depends": [
-                        {
-                            "type": "Normal",
-                            "output": root_output,
-                            "sourceType": "Manual"
-                        }
-                    ]
+                    "depends": depends_list
                 }
             ]
         }
