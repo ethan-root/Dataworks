@@ -1,6 +1,6 @@
 # DataWorks DataOps — OSS to MaxCompute
 
-基于 **GitHub Actions + Python** 自动化编排 Aliyun DataWorks 数据集成任务，实现配置驱动、多环境串行部署的 DataOps CI/CD 体系。
+基于 **GitHub Actions + Python** 自动化编排 Aliyun DataWorks 数据集成任务，实现配置驱动、多环境串行部署与代码化管理的 DataOps CI/CD 体系。
 
 ---
 
@@ -9,105 +9,71 @@
 ```text
 Dataworks/
 ├── .github/workflows/               # CI/CD 流水线定义
-│   ├── datawork_node_create_update.yml  # 主流水线（push 触发，节点创建/更新）
+│   ├── datawork_node_create_update.yml  # 主流水线（Push/手动触发，全量节点组装与创建/更新）
 │   ├── _deploy_env.yml              # 可复用工作流（单环境部署，调用 ci_runner.py）
-│   ├── database_update.yml          # DDL 执行流水线（plan / apply / apply_all）
-│   └── pr_validation.yml            # PR 安全扫描（SonarCloud + GitGuardian + DDL 报告）
+│   ├── database_update.yml          # DDL 执行流水线
+│   └── pr_validation.yml            # PR 安全扫描（SonarCloud/GitGuardian）
 │
 ├── configuration/                   # 全局底板配置（系统级参数，无需业务人员修改）
 │   ├── integration-config.json      # 数据集成节点系统级底板
 │   ├── oss-datasource.json          # OSS 数据源系统级底板
 │   ├── maxcompute-datasource.json   # MaxCompute 数据源系统级底板
-│   ├── parquet-name-get.json        # 上游 Parquet 节点模板
-│   ├── parquet-file-completed.json  # 下游 Parquet 归档节点模板
-│   └── data-clean.json              # MaxCompute 数据清理节点模板
+│   ├── get_earliest_file_name.py    # 上游节点底层参考源码
+│   └── move_parquet_to_completed.py # 下游归档底层参考源码
 │
 ├── features/                        # 业务工作区（开发人员每次只改这里）
 │   ├── shared/
-│   │   └── ddl-metadata.sql         # 全局元数据表 DDL（跨 feature 共享）
+│   │   └── ddl-metadata.sql         # 全局元数据表、Changelog 跟踪表定义
 │   └── {feature-name}/              # 以集成节点业务名为目录名
-│       ├── setting-dev.json          # DEV 环境业务参数
-│       ├── setting-qa.json           # QA 环境业务参数
-│       ├── setting-preprod.json      # PRE-PROD 环境业务参数
-│       ├── setting-prod.json         # PROD 环境业务参数
+│       ├── setting-dev.json         # DEV 环境业务参数
+│       ├── setting-qa.json          # QA 环境业务参数
+│       ├── setting-preprod.json     # PRE-PROD 环境业务参数
+│       ├── setting-prod.json        # PROD 环境业务参数
 │       └── ddl/
-│           └── YYYYMMDDHHMI_create.sql  # MaxCompute 建表 SQL（带时间戳版本）
+│           ├── YYYYMMDDHHMI_create.sql  # MaxCompute 建表 SQL
+│           └── YYYYMMDDHHMI_alter.sql   # MaxCompute 改表 SQL（支持增量演进）
 │
-└── scripts/                         # Python 脚本（三层架构）
-    ├── ci_runner.py                 # ★ 编排层：发起部署流程的总指挥
-    ├── config_merger.py             # 配置合并引擎（底板 + 业务参数 → 完整配置）
-    ├── dataworks_client.py          # DataWorks SDK 封装（get/create/update/publish）
-    ├── check_integration_node.py    # 检查节点是否存在
-    ├── create_integration_node.py   # 创建数据集成节点
-    ├── update_integration_node.py   # 更新数据集成节点（含 remote diff 对比）
-    ├── check_oss_ds.py              # 检查 OSS 数据源
-    ├── create_oss_ds.py             # 创建 OSS 数据源
-    ├── check_mc_ds.py               # 检查 MaxCompute 数据源
-    ├── create_mc_ds.py              # 创建 MaxCompute 数据源
-    ├── create_table.py              # 在 MaxCompute 中执行建表 SQL（幂等）
-    ├── create_downstream_node.py    # 创建下游节点（Parquet → completed）
-    ├── create_python_cp_node.py     # 创建 Python 节点（cp / delete 两种类型）
-    ├── publish_node.py              # 三阶段发布（BUILD → PROD_CHECK → PROD）
-    └── requirements.txt             # Python 依赖
+└── scripts/                         # Python 部署引擎
+    ├── ci_runner.py                 # ★ 编排层：发起上下游全链路部署流程的总指挥
+    ├── config_merger.py             # 配置引擎（底板 + 业务参数 + DDL 聚合解析 → 完整配置）
+    ├── dataworks_client.py          # DataWorks SDK 封装（内置 Throttling 指数退避重试保护）
+    ├── check/create_*_ds.py         # 数据源探查与创建工具
+    ├── create_table.py              # MaxCompute 增量 DDL 迁移执行器（基于 Changelog）
+    ├── create_upstream_node.py      # 上游 Python 节点生成器（拉取处理）
+    ├── create_integration_node.py   # 核心 DI 数据集成节点生成/对比器
+    ├── create_downstream_node.py    # 下游归档移动节点生成器
+    ├── create_python_cp_node.py     # 分区自动清理节点生成器
+    └── publish_node.py              # 三阶段打样与真实环境发布工具
 ```
 
 ---
 
 ## 🚀 CI/CD 流水线说明
 
-### 1. 节点部署流水线（`datawork_node_create_update.yml`）
+### 1. 节点全链路部署流水线（`datawork_node_create_update.yml`）
 
-**触发条件**：向 `main` 分支 push，且 `features/**` 目录下有文件变更。
+**触发条件**：
+- 向 `main` 分支 push，且 `features/**` 目录下有文件变更时自动触发。
+- 支持 `workflow_dispatch` 手动触发网页 UI 按钮（填写 `all` 部署全量或填写 `模块名` 如 `test-feature` 部署单节点）。
 
-**执行流程（三层架构）**：
+**执行流程（高智能 Upsert）**：
+采用全链路编排，对于给定的 feature，依次执行探测对比，如果节点已存在且有变化则走修改 `UPDATE`，不存在则全新 `CREATE`，完全跳过未改动文件无损发布：
+1. ☁️ **确保 OSS 和 MC 数据源可用**
+2. 📄 **增量 DDL 迁移**：按时间顺序增量执行所有未执行的 `ddl/*.sql` 文件，已执行的 SQL 会记录到变更表避免重复跑。
+3. 🐍 **上游赋值节点更新**：拼装用于探测最早文件的 Python 工作包推送云端。
+4. 🔗 **中心数据集成节点更新**：合并配置形成主血缘 DI 任务。
+5. 📤 **下游及清理节点更新**：挂接文件移动归档与旧历史分区清理操作。
+6. 🚀 **触发流水线自动化发布工作**。
 
-```
-YAML（协调层）          Python 编排层              Python 执行层
-─────────────          ────────────               ────────────
-detect 变更 feature  →  ci_runner.py            →  check_*.py
-        │               ├── 节点已存在 → UPDATE      create_*.py
-        ↓               │   └── update → publish    update_*.py
-deploy-dev              └── 节点不存在 → CREATE     publish_node.py
-deploy-qa                   ├── 确保 OSS 数据源
-deploy-preprod              ├── 确保 MC 数据源
-deploy-prod 🔒             ├── 创建 MC 表
-```
-
-**多环境串行**：`dev → qa → preprod → prod`，每个环境使用对应的 `setting-<env>.json`，`prod` 需 GitHub Environment 人工审批。
-
----
-
-### 2. DDL 执行流水线（`database_update.yml`）
-
-**触发条件**：手动触发（`workflow_dispatch`）或 PR 到 main（plan 模式）。
-
-| 模式 | 说明 |
-|---|---|
-| `plan` | 打印将要变更的 DDL 文件，供 Review，不执行 |
-| `apply` | 对指定单一环境执行 DDL（紧急修复使用）|
-| `apply_all` | 串行执行所有环境 `dev → qa → preprod → prod`，`prod` 需审批 |
-
----
-
-### 3. PR 安全验证（`pr_validation.yml`）
-
-**触发条件**：向 `main` 发起 Pull Request。
-
-| Job | 工具 | 状态 |
-|---|---|---|
-| 🔍 SonarCloud 代码质量扫描 | `SonarSource/sonarcloud-github-action` | 待接入 `SONAR_TOKEN` |
-| 🔐 GitGuardian 密钥泄露检测 | `GitGuardian/ggshield-action` | 待接入 `GITGUARDIAN_API_KEY` |
-| 📋 DDL 变更报告 | git diff | 立即生效 |
-
-> 接入账号后，删除 `continue-on-error: true` 即可开启阻断 PR 的强校验。
+**多环境串行流转**：`dev → qa → preprod → prod`，每个环境使用对应的 `setting-<env>.json` 注入环境独立配方参数，`prod` 需 GitHub Environment 人工审批介入。
 
 ---
 
 ## ✍️ 业务开发指南
 
-### 新建一个 Feature（数据集成任务）
+### 新建一个 Feature（数据集成任务流）
 
-**第一步**：在 `features/` 下创建目录（目录名 = DataWorks 节点名前缀）
+**第一步**：在 `features/` 下创建目录（目录名 = 你的业务名）
 
 ```bash
 features/
@@ -120,7 +86,7 @@ features/
         └── 202602141515_create.sql
 ```
 
-**第二步**：填写 `setting-dev.json`（各环境仅参数值不同）
+**第二步**：填写 `setting-dev.json`（各环境仅端点/库名参数值不同，脚本会自动拼装进上下游任务）
 
 ```json
 {
@@ -140,195 +106,48 @@ features/
         "node_name": "your_integration_node_name",
         "cron": "00 10 00-23/1 * * ?",
         "reader_datasource": "oss_your_ds_name",
-        "reader_path": "parquet/*.parquet",
+        "reader_prefix": "camos/new_project/",
         "writer_datasource": "mc_your_ds_name",
         "writer_table": "your_target_table",
-        "writer_partition": "pt='${bizdate}'"
+        "mc_partition_retention": 30
     }
 }
 ```
 
-**第三步**：在 `ddl/` 下放建表 SQL（Schema-Driven，字段自动映射到集成任务）
+**第三步**：在 `ddl/` 下放建表 SQL（Schema-Driven：此处写多少列，DataWorks 底层就会自动拉出来双向映射拼接，且随 `alter table` 持续自动增量叠加扩展）
 
 ```sql
 CREATE TABLE IF NOT EXISTS your_target_table(
-    `col1` STRING COMMENT '',
-    `col2` STRING COMMENT ''
+    `id` STRING COMMENT '用户ID',
+    `age` STRING COMMENT '年龄'
 )
-PARTITIONED BY (pt STRING)
-lifecycle 36500;
+PARTITIONED BY (pt STRING);
 ```
 
-**第四步**：Commit & Push to main → GitHub Actions 自动触发全流程部署 ✅
+**第四步**：Commit & Push to main → GitHub Actions 自动触发全链路 5+ 节点的自动化重组与部署发布 ✅
 
 ---
 
-## ⚙️ 配置合并引擎（`config_merger.py`）
+## ⚙️ 核心引擎剖析
 
-每次部署时，`config_merger.py` 按以下顺序组装完整配置：
+### 1. 配置超级合并映射（`config_merger.py`）
+每次部署时按顺序深度混淆参数：
+1. **获取底板**：从 `configuration/` 拾取无生命的原型 JSON 或 python 源码。
+2. **叠加环境字典**：把 `setting-<env>.json` 中的定制参数暴力注入原型的血肉中。
+3. **DDL 增量词法透视 (`_parse_all_columns_from_sqls`)**：脚本会自动按时间戳遍历这个环境自古至今所有跑过的 DDL 文件，利用正则提取所有的 `CREATE` 和 `ALTER ADD COLUMNS` 列记录，智能像滚雪球一般拼装出当前时刻这张表完整的“表结构画像”，然后自动转化填装至集成节点的数组映射关系里！无须人为维护繁琐 Mapping！
 
-1. **读取底板**：从 `configuration/` 加载全局系统级 JSON 模板
-2. **叠加业务参数**：用 `setting-<env>.json` 中的业务字段覆写底板
-3. **Schema-Driven 字段映射**：从 `ddl/*.sql` 正则提取列名，自动生成 OSS Reader 和 MaxCompute Writer 的 Column Array
-4. **投递**：向 DataWorks OpenAPI 发起 Create / Update 请求
+### 2. DataWorks API 万能外壳（`dataworks_client.py`）
+该文件不单单是 SDK 调用器，更是包含了极具韧性的防御设施：
+* **内置抗限流防护 (`_call_with_retry`)**：DataWorks 公共云拥有极低阈值的 QPS OpenAPI 请求频率。当大批量全量部署或创建时极易触发 `Throttling.Resource 400` 错误。此客户端拦截了所有查/改/写流量，一旦触碰警报，自适应执行 0.5s~8s 的指数安全退避 (Exponential Backoff)，保障流水线面对万级任务依旧固若金汤不崩溃。
+* **差异对比更新工具**：内置了远端拉取 JSON Schema 的扁平拍平对比函数。在 Upsert 时能精确打印本地与远端究竟相差哪几个字符，只对实质变更文件下达指令，0 差异则强制忽略避免无谓耗费版本发布资源。
 
----
+### 3. DDL 时序跟踪表机制（`create_table.py`）
+依靠事先创建位于共享元数据目录 `shared/ddl-metadata.sql` 里的跟踪表 `database_changelog`。每次读取前获取已加载文件名：
+- 未应用过的增量记录执行真实 MaxCompute 连接并执行 `pyodps`。
+- 回写文件名入库确保极高幂等性 (Idempotent)。 
 
-## 🔑 环境变量（GitHub Secrets）
-
-| Secret 名称 | 说明 |
-|---|---|
-| `DATAWORKS_PROJECT_ID` | DataWorks 工作空间 ID |
-| `ALIYUN_ACCESS_KEY_ID` | 阿里云 AccessKey ID |
-| `ALIYUN_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret |
-| `ALIYUN_REGION` | 地域（如 `cn-shanghai`）|
-| `MAXCOMPUTE_PROJECT` | MaxCompute 项目名 |
-| `MAXCOMPUTE_ENDPOINT` | MaxCompute API Endpoint |
-| `SONAR_TOKEN` | （可选）SonarCloud 扫描令牌 |
-| `GITGUARDIAN_API_KEY` | （可选）GitGuardian API Key |
-
-**本地开发调试**：
-
-```bash
-export ALIBABA_CLOUD_ACCESS_KEY_ID="xxx"
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET="xxx"
-export ALIYUN_REGION="cn-shanghai"
-export DATAWORKS_PROJECT_ID="xxxxxx"
-export MAXCOMPUTE_PROJECT="your_mc_project"
-export MAXCOMPUTE_ENDPOINT="http://service.cn-shanghai.maxcompute.aliyun.com/api"
-
-# 本地模拟一次 dev 环境部署（无需触发 GitHub Actions）
-python scripts/ci_runner.py --feature-list my-new-feature --env dev
-```
-
----
-
-## 📜 Scripts 脚本核心逻辑
-
-### 编排层
-
-#### `ci_runner.py` — 部署总指挥
-
-被 `_deploy_env.yml` 中的一行调用，封装了完整的创建/更新决策逻辑：
-
-```
-接收 --feature-list 和 --env 参数
-  └── 遍历每个 feature
-       ├── 校验目录和 setting-<env>.json 是否存在
-       ├── 调用 check_integration_node.py → 判断节点存在与否
-       │    ├── 节点已存在 → UPDATE 分支
-       │    │    └── update_integration_node.py → publish_node.py
-       │    └── 节点不存在 → CREATE 分支
-       │         ├── check/create OSS 数据源
-       │         ├── check/create MaxCompute 数据源
-       │         ├── create_table.py（建表 DDL）
-       │         ├── create_python_cp_node.py --node-type cp
-       │         ├── create_integration_node.py
-       │         ├── create_downstream_node.py
-       │         ├── create_python_cp_node.py --node-type delete
-       │         └── publish_node.py
-```
-
----
-
-### 配置层
-
-#### `config_merger.py` — 配置合并引擎
-
-提供三个对外函数：
-
-| 函数 | 用途 |
-|---|---|
-| `load_merged_node_config(project_dir, env)` | 合并 `integration-config.json` + `setting-<env>.json[task]`，并从 `ddl/*.sql` 正则提取列名注入 Reader/Writer Column Array |
-| `load_merged_oss_ds_config(project_dir, env)` | 合并 `oss-datasource.json` + `setting-<env>.json[datasource.oss]` |
-| `load_merged_mc_ds_config(project_dir, env)` | 合并 `maxcompute-datasource.json` + `setting-<env>.json[datasource.mc]` |
-
-**Schema-Driven 字段映射**（`_parse_columns_from_sql`）：用正则从 `CREATE TABLE ... (...)` 括号内提取列名（支持反引号/无反引号），自动生成 OSS Reader 的 `BINARY` 类型列数组和 MaxCompute Writer 的列名数组。
-
----
-
-### DataWorks API 层
-
-#### `dataworks_client.py` — SDK 统一封装
-
-| 函数 | 调用的 API | 说明 |
-|---|---|---|
-| `create_client()` | — | 从环境变量读取 AK/SK/Region，初始化客户端 |
-| `build_spec(config)` | — | 将配置 dict 转换为 DataWorks FlowSpec JSON（含调度、DI 任务、资源组）|
-| `create_node(...)` | `CreateNode` | 在工作空间创建新节点 |
-| `get_node_id(...)` | `ListFiles` | 用 `exact_file_name` 精确查找节点，返回 DataStudio `file_id` |
-| `update_node(...)` | `GetNode` + `UpdateNode` | 拉取远端 Spec → 本地重建 → 字段级 diff → 有差异才更新 |
-
-> **ID 区分**：DataWorks 节点有两个 ID，`file_id`（数据开发侧，用于 Update/Get）和 `node_id`（调度侧）。`get_node_id()` 返回的是 `file_id`。
-
----
-
-### 节点操作脚本
-
-#### `check_integration_node.py`
-1. 从 `config_merger` 读取 `node_name`
-2. 调用 `get_node_id()` 精确查找
-3. **退出码约定**：找到 → `exit 0`；未找到 → `exit 1`（`ci_runner.py` 依赖此做 create/update 分支判断）
-
-#### `create_integration_node.py`
-1. 合并完整配置（含 Schema-Driven 字段映射）
-2. `build_spec()` 构建 FlowSpec JSON
-3. 调用 `CreateNode API` 创建节点
-
-#### `update_integration_node.py`
-1. 合并本地配置，`GetNode` 拉取远端当前 Spec
-2. 递归扁平化双方（`a.b.c[0].d → value`），打印字段级 diff 表格
-3. 仅当 `diff_count > 0` 时调用 `UpdateNode`，无变化时跳过
-
----
-
-### 数据源操作脚本
-
-#### `check_oss_ds.py` / `check_mc_ds.py`
-- 调用 `ListDataSources` API，按名称匹配；处理多种嵌套响应结构，支持分页兜底
-- **退出码约定**：找到 → `exit 0`；未找到 → `exit 1`
-
-#### `create_oss_ds.py` / `create_mc_ds.py`
-- 合并底板配置后调用 `CreateDataSource` API
-- **幂等处理**：API 返回 HTTP 400 "名称重复" 时静默吸收，防止流水线因重复创建终止
-
----
-
-### DDL 脚本
-
-#### `create_table.py`
-1. 在 `features/<name>/ddl/` 找最新 `*.sql`（按文件名时间戳排序取最后一个）
-2. 用 `pyodps` 的 `execute_sql()` 在 MaxCompute 执行 DDL
-3. SQL 包含 `IF NOT EXISTS`，天然幂等
-
----
-
-### 发布脚本
-
-#### `publish_node.py` — 三阶段发布
-
-调用 DataWorks Deploy Pipeline API（`CreateDeployOrder`），三阶段执行：
-
-| 阶段 | 说明 |
-|---|---|
-| `BUILD_PACKAGE` | 打包节点，生成待发布制品 |
-| `PROD_CHECK` | 生产合规性校验（依赖关系、权限检查）|
-| `PROD` | 正式发布到生产调度环境 |
-
-轮询每个阶段状态，超时（每阶段最多 60 秒）或失败时终止并报错。
-
----
-
-### 辅助/工具脚本
-
-#### `validate_row_count.py` — 行数对比验证（非流水线主流程）
-- 用 `SELECT COUNT(*) UNION ALL` 同时查询 OSS 外部表与 MaxCompute 内部表行数
-- 不一致时打印差异行数，返回非零退出码
-
-#### `clean_mc_tables.py` — MaxCompute 表清理（运维工具）
-- 列举项目下所有表，删除创建时间超过指定天数（默认 30 天）的表
-- 白名单保护（`WHITELIST_TABLES`）；`--execute` 标志控制真实删除，否则为 dry-run
-
-#### `deploy.py` — 旧版本地部署入口（已被 `ci_runner.py` 取代）
-- 早期版本的本地单次部署脚本，保留供参考，CI/CD 中不再使用
-
+### 4. 发布与提交指令（`publish_node.py`）
+底层借助 DataWorks Node Deploy 接口完成三阶段标准下发动作：
+- `BUILD_PACKAGE` 打包发版。
+- `PROD_CHECK` 强制触发质量、发布规约校验规则检测防泄漏。
+- `PROD` 切流生效发布上线。
