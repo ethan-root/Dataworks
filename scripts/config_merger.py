@@ -185,3 +185,121 @@ def load_merged_mc_ds_config(project_dir: str, env: str = "dev") -> dict:
         config["endpoint"] = mc_global["endpoint"]
         
     return config
+
+
+def load_merged_upstream_config(project_dir: str, env: str = "dev") -> dict:
+    """
+    加载上游赋值节点（CONTROLLER_ASSIGNMENT）的完整合并配置。
+
+    合并顺序（优先级由低到高）：
+      1. upstream-node-config.json   — 稳定系统参数（commandTypeId、resource_group 等）
+      2. integration-config.json     — 共享的 owner / resource_group / metadata（可覆盖上层值）
+      3. setting-<env>.json          — 环境专属参数（node_name、cron、reader_prefix、OSS 配置）
+
+    返回值为扁平化 dict，调用方直接用 config["key"] 读取。
+
+    主要字段：
+      node_name, cron, reader_prefix   — 来自 setting-<env>.json task 层
+      oss_bucket, oss_endpoint         — 来自 setting-<env>.json datasource.oss 层
+      owner, resource_group            — 来自 integration-config.json（被 upstream-node-config.json 覆盖）
+      project_id, project_identifier   — 来自 integration-config.json metadata
+      commandTypeId, cu, language …    — 来自 upstream-node-config.json
+    """
+    # ── 第一层：上游节点稳定底板 ─────────────────────────────────────
+    upstream_base = _load_base_config(project_dir, "upstream-node-config.json")
+
+    # ── 第二层：从 integration-config.json 读取共享参数 ──────────────
+    integration_cfg = _load_base_config(project_dir, "integration-config.json")
+    for shared_key in ("owner", "resource_group", "resourceGroupId", "resourceGroupName"):
+        if shared_key in integration_cfg:
+            upstream_base.setdefault(shared_key, integration_cfg[shared_key])
+
+    # 提取 project_id / project_identifier（从 metadata）
+    metadata = integration_cfg.get("metadata", {})
+    proj = metadata.get("project", {})
+    upstream_base["project_id"] = str(
+        proj.get("projectId") or metadata.get("projectId") or ""
+    )
+    upstream_base["project_identifier"] = str(
+        proj.get("projectIdentifier") or metadata.get("projectIdentifier") or ""
+    )
+
+    # ── 第三层：setting-<env>.json 环境覆写 ─────────────────────────
+    setting = _load_json_silently(Path(project_dir) / f"setting-{env}.json")
+    task_cfg = setting.get("task", {})
+    oss_cfg  = setting.get("datasource", {}).get("oss", {})
+
+    # task 层覆写
+    for key in ("node_name", "cron", "reader_prefix"):
+        if key in task_cfg:
+            upstream_base[key] = task_cfg[key]
+
+    # OSS 层覆写（扁平化, 前缀 oss_ 以区分其他字段）
+    if "bucket" in oss_cfg:
+        upstream_base["oss_bucket"] = oss_cfg["bucket"]
+    if "endpoint" in oss_cfg:
+        upstream_base["oss_endpoint"] = oss_cfg["endpoint"]
+
+    # 去除内嵌注释字段（以 _comment 开头的键）
+    return {k: v for k, v in upstream_base.items() if not k.startswith("_comment")}
+
+
+def load_merged_downstream_config(project_dir: str, env: str = "dev") -> dict:
+    """
+    加载下游 Python 节点（PYTHON）的完整合并配置。
+
+    合并顺序（优先级由低到高）：
+      1. downstream-node-config.json  — 稳定系统参数（commandTypeId=1322 / cu / resource_group 等）
+      2. integration-config.json      — 共享的 owner / resource_group / project metadata
+      3. setting-<env>.json           — 环境专属参数（node_name、cron、OSS bucket/endpoint）
+
+    返回值为扁平化 dict，调用方直接用 config["key"] 读取。
+
+    主要字段（除通用调度字段外）：
+      node_name           — 节点基准名（脚本拼接 _downstream 后缀）
+      cron                — 调度 cron 表达式
+      oss_bucket          — OSS Bucket 名称
+      oss_endpoint        — OSS Endpoint 地址
+      project_id          — DataWorks 工作空间 ID（数字字符串）
+      project_identifier  — DataWorks 工作空间标识符（用于构造 flow.depends.output）
+      commandTypeId       — 1322（DataWorks Python3 节点类型）
+      language            — "python3"
+      command             — "PYTHON"
+    """
+    # ── 第一层：下游节点稳定底板 ─────────────────────────────────────
+    base = _load_base_config(project_dir, "downstream-node-config.json")
+
+    # ── 第二层：从 integration-config.json 读取共享参数 ──────────────
+    integration_cfg = _load_base_config(project_dir, "integration-config.json")
+    for shared_key in ("owner", "resource_group", "resourceGroupId", "resourceGroupName"):
+        if shared_key in integration_cfg:
+            base.setdefault(shared_key, integration_cfg[shared_key])
+
+    # 提取 project_id / project_identifier（downstream 需要 identifier 构造 flow.depends）
+    metadata = integration_cfg.get("metadata", {})
+    proj = metadata.get("project", {})
+    base["project_id"] = str(
+        proj.get("projectId") or metadata.get("projectId") or ""
+    )
+    base["project_identifier"] = str(
+        proj.get("projectIdentifier") or metadata.get("projectIdentifier") or ""
+    )
+
+    # ── 第三层：setting-<env>.json 环境覆写 ─────────────────────────
+    setting = _load_json_silently(Path(project_dir) / f"setting-{env}.json")
+    task_cfg = setting.get("task", {})
+    oss_cfg  = setting.get("datasource", {}).get("oss", {})
+
+    # task 层覆写
+    for key in ("node_name", "cron"):
+        if key in task_cfg:
+            base[key] = task_cfg[key]
+
+    # OSS 层覆写（扁平化，前缀 oss_ 以区分）
+    if "bucket" in oss_cfg:
+        base["oss_bucket"] = oss_cfg["bucket"]
+    if "endpoint" in oss_cfg:
+        base["oss_endpoint"] = oss_cfg["endpoint"]
+
+    # 去除注释字段
+    return {k: v for k, v in base.items() if not k.startswith("_comment")}

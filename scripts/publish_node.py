@@ -57,19 +57,34 @@ def main():
     print(f"🚀 [PUBLISH] 开始将节点 '{node_name}' 发布到生产环境")
     print(f"{'='*50}")
 
-    # ── 3. 获取真实节点 ID ─────────────────────────────────────
-    node_file_id = get_node_id(client, project_id, node_name)
-    if not node_file_id:
-        print(f"❌ 查无此节点 '{node_name}'，请先运行 create_node 部署流程。")
+    # ── 3. 获取真实节点 ID 列表 ─────────────────────────────────────
+    # 计算所有的关联节点名称
+    node_names = [
+        node_name,                   # 集成节点
+        f"{node_name}_upstream",     # 上游赋值节点
+        f"{node_name}_downstream",   # 下游 Python 节点
+        f"{node_name}_cp"            # 清理 Python 节点
+    ]
+    
+    object_ids = []
+    for nm in node_names:
+        fid = get_node_id(client, project_id, nm)
+        if fid:
+            object_ids.append(str(fid))
+            print(f"✅ 获取到节点 '{nm}' ID: {fid}")
+        else:
+            print(f"⚠️ [WARN] 查无此节点 '{nm}'，将跳过该节点的发布。")
+            
+    if not object_ids:
+        print("❌ 没有找到任何需要发布的节点，请先运行部署流程。")
         sys.exit(1)
-    print(f"✅ 获取到节点的真实 ID: {node_file_id}")
 
     # ── 4. 触发 CreatePipelineRun ──────────────────────────────
-    print(f"\n[INIT] 正在创建发布流水线...")
+    print(f"\n[INIT] 正在创建发布流水线，共包含 {len(object_ids)} 个节点...")
     pipeline_req = dw_models.CreatePipelineRunRequest(
         type='Online',
         project_id=project_id,
-        object_ids=[str(node_file_id)]
+        object_ids=object_ids
     )
     
     try:

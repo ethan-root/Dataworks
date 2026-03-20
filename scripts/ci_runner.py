@@ -92,11 +92,22 @@ def deploy_feature(feature_name: str, env: str) -> None:
 
     if node_exists:
         # ━━━ UPDATE 分支 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        print("  ┌─ [UPDATE WORKFLOW] 节点已存在，执行更新流程")
-        # 3.2.1 获取已有节点配置（封装于 update 脚本内）
-        # 3.2.2 更新数据集成节点
-        _log_step(1, 1, "🔄 更新数据集成节点配置")
+        print("  ┌─ [UPDATE WORKFLOW] 节点已存在，执行全部节点的更新流程")
+        
+        _log_step(1, 5, "🔄 更新目标表 DDL (新增字段等)")
+        _run("create_table.py", common_args)
+        
+        _log_step(2, 5, "🔄 更新上游节点")
+        _run("create_upstream_node.py", common_args)
+        
+        _log_step(3, 5, "🔄 更新数据集成节点")
         _run("update_integration_node.py", common_args)
+        
+        _log_step(4, 5, "🔄 更新下游节点")
+        _run("create_downstream_node.py", common_args)
+
+        _log_step(5, 5, "🔄 更新清理节点")
+        _run("create_python_cp_node.py", common_args + ["--node-type", "delete"])
         _log_done()
 
     else:

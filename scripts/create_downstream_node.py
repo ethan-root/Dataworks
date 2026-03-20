@@ -1,227 +1,328 @@
 # -*- coding: utf-8 -*-
 """
 create_downstream_node.py
+
 职责：
-1. 读取 scrips_add/move_parquet_to_completed.py 中的 Python 逻辑
-2. 将环境变量和配置（AK/SK / endpoint / bucket）以硬编码形式注入 Python
-3. 在 DataWorks 中创建下游节点 (PYTHON)，并通过 flow.depends 链接到数据集成节点
-4. 将上游赋值节点的参数（文件名）传入作为参数
+  在 DataWorks 中创建（或更新）下游 Python 节点（PYTHON）。
+  该节点在数据集成完成后触发，将 OSS 中已同步完毕的 Parquet 文件
+  移动到 completed/ 目录。
+
+数据流（节点执行链）：
+  上游赋值节点 (_upstream) → 数据集成节点 (DI) → 本节点 (_downstream)
+  ↑ 获取文件名               ↑ 同步入库               ↑ 移动已同步文件
+
+配置来源（合并优先级由低到高）：
+  1. configuration/downstream-node-config.json — 稳定系统参数（commandTypeId=1322 / cu / resource_group 等）
+  2. configuration/integration-config.json     — 共享的 owner / resource_group / project metadata
+  3. features/<name>/setting-<env>.json        — 环境专属参数（cron / node_name / OSS bucket 等）
+
+本地调试：
+  python scripts/create_downstream_node.py --project-dir features/test-feature --env dev
+
+所需环境变量（CI 中由 GitHub Actions secrets 注入）：
+  ALIBABA_CLOUD_ACCESS_KEY_ID      — 阿里云 AccessKey ID
+  ALIBABA_CLOUD_ACCESS_KEY_SECRET  — 阿里云 AccessKey Secret
+  DATAWORKS_PROJECT_ID             — DataWorks 工作空间数字 ID（可覆盖配置中的 project_id）
+  ALIYUN_REGION                    — 阿里云地域（默认 cn-shanghai）
 """
 
-import os
-import sys
 import json
 import logging
+import os
+import sys
+import traceback
 import argparse
 from pathlib import Path
 
-# 添加项目跟目录到 sys.path 方便引用
+# ── 将 scripts/ 目录加入 sys.path，确保在任意 CWD 下均可正确引用同级模块 ──
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_merger import load_merged_node_config
+from config_merger import load_merged_downstream_config
 from dataworks_client import create_client, get_node_id, update_node
 
-# import DataWorks public SDK models
-from alibabacloud_dataworks_public20240518 import models as dataworks_public_20240518_models
+from alibabacloud_dataworks_public20240518 import models as dw_models
 from alibabacloud_tea_util import models as util_models
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def get_env_or_fail(name: str) -> str:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 工具函数
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_env_or_fail(name: str) -> str:
+    """读取必填环境变量，不存在时立即退出并报错。"""
     value = os.environ.get(name, "").strip()
     if not value:
-        logger.error(f"Environment variable '{name}' is required.")
+        logger.error(f"必填环境变量未设置: '{name}'")
         sys.exit(1)
     return value
 
 
-def build_downstream_node_spec(config, project_dir, env, ak, sk) -> dict:
-    task_config = config.get("task", {})
-    
-    # 获取原始节点名并添加 _downstream 后缀
-    base_node_name = task_config.get("node_name", "integration_node")
-    node_name = base_node_name + "_downstream"
-    
-    # 上游（数据集成节点）的 Output 标识符，通常用来做 depends 链接
-    # （DW 数据集成节点的默认产出名称是 {projectIdentifier}.{node_name} )
-    project_identifier = config.get("metadata", {}).get("projectIdentifier", "")
-    if project_identifier:
-        upstream_output_name = f"{project_identifier}.{base_node_name}"
-    else:
-        # Fallback 保底，依赖自身的 project_id 或者其他形式
-        upstream_output_name = f"{config.get('metadata', {}).get('projectId')}.{base_node_name}"
-    
-    oss_config = config.get("datasource", {}).get("oss", {})
-    bucket = oss_config.get("bucket", "YOUR_BUCKET")
-    endpoint = oss_config.get("endpoint", "YOUR_ENDPOINT")
-    
-    owner_id = config.get("owner", "")
-    resource_group = config.get("resource_group", "")
-    cron_expr = task_config.get("cron", "00 00 00-23/1 * * ?")
-    
-    # ---------------------------------------------------------
-    # 读取参考脚本（scripts/move_parquet_to_completed.py）
-    # ---------------------------------------------------------
-    ref_script_path = Path("scripts/move_parquet_to_completed.py")
-    if not ref_script_path.exists():
-        logger.error(f"参考脚本不存在: {ref_script_path}")
+def _load_ref_script() -> str:
+    """
+    读取 move_parquet_to_completed.py 的核心逻辑（截断 main() 之前的部分）。
+    使用绝对路径，不依赖 CWD。
+    """
+    # ✅ Bug Fix #2: 使用绝对路径，不再依赖 CWD
+    ref_path = SCRIPT_DIR / "move_parquet_to_completed.py"
+    if not ref_path.exists():
+        logger.error(f"参考脚本不存在: {ref_path}")
         sys.exit(1)
-        
-    raw_content = ref_script_path.read_text(encoding="utf-8")
-    
-    # 截断掉末尾的 main() 和 handler() 测试代码，只保留核心函数
-    core_logic = raw_content.split("def main():")[0]
-    
-    # Python 节点的参数接收可以通过 sys.argv 取参数 1 (DataWorks Python 节点特有的形式)
-    executable_script = core_logic + f"""
+
+    raw = ref_path.read_text(encoding="utf-8")
+    # 截断 main() 和 handler() 测试代码，只保留核心函数定义和 import
+    core = raw.split("def main():")[0].rstrip()
+    return core
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spec 构建
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_downstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
+    """
+    构建下游 Python 节点的 DataWorks FlowSpec dict。
+
+    节点依赖链设计：
+      flow.depends.output = "{project_identifier}.{base_node_name}"
+        → 等待数据集成节点（DI node）完成后才触发执行
+
+      parameters[0].name="args", value="${base_node_name_upstream.outputs}"
+        → 从赋值节点接收 Parquet 文件路径，通过 sys.argv[1] 传入脚本
+
+    Args:
+        node_config : 由 load_merged_downstream_config() 返回的扁平化配置 dict
+        ak          : 阿里云 AccessKey ID（注入到节点脚本内容）
+        sk          : 阿里云 AccessKey Secret（同上）
+
+    Returns:
+        (spec_dict, node_name) 元组
+    """
+    # ✅ Bug Fix #1: 直接从扁平化 dict 读取，不再猜测嵌套层级
+    base_node_name  = node_config.get("node_name", "downstream_node")
+    node_name       = base_node_name + "_downstream"
+    cron_expr       = node_config.get("cron",             "00 00 00-23/1 * * ?")
+    resource_group  = node_config.get("resource_group",   "")
+    owner_id        = node_config.get("owner",            "")
+    oss_bucket      = node_config.get("oss_bucket",       "")
+    oss_endpoint    = node_config.get("oss_endpoint",     "")
+    project_identifier = node_config.get("project_identifier", "")
+    project_id_str  = node_config.get("project_id",       "")
+    command_type_id = int(node_config.get("commandTypeId", 1322))
+    cu              = str(node_config.get("cu",           "0.5"))
+    language        = node_config.get("language",         "python3")
+
+    # ── 构建 flow.depends.output（指向数据集成节点的输出标识符）─────────
+    # ✅ Bug Fix #5: 安全的 fallback 拼接，不产生 "None.xxx"
+    if project_identifier:
+        upstream_di_output = f"{project_identifier}.{base_node_name}"
+    elif project_id_str:
+        upstream_di_output = f"{project_id_str}.{base_node_name}"
+    else:
+        logger.error("project_identifier 和 project_id 均为空，无法构造 flow.depends.output")
+        sys.exit(1)
+
+    # 上游赋值节点的参数引用（文件名传递）
+    upstream_assignment_node = base_node_name + "_upstream"
+    file_path_param_value    = f"${{{upstream_assignment_node}.outputs}}"
+
+    # ── 构建节点执行脚本内容 ─────────────────────────────────────────
+    core_logic = _load_ref_script()
+
+    node_script_content = core_logic + f"""
+
 
 if __name__ == '__main__':
-    import sys
-    # CI/CD 自动注入配置
-    ak = '{ak}'
-    sk = '{sk}'
-    endpoint = '{endpoint}'
-    bucket = '{bucket}'
-    
-    # 从 DataWorks 节点的调度参数传递进来的文件名 (赋值节点产出)
-    # 此处默认作为 Python 脚本的第一个传入参数，对应 parameters -> args
-    file_path = ''
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1].strip()
-        
-    if not file_path:
-        print("未接收到传递的文件名，将停止执行！")
-    else:
-        print(f"接收到文件系统调度参数: {{file_path}}")
-        move_to_completed(ak, sk, endpoint, bucket, file_path)
+    import sys as _sys
+
+    # OSS 连接配置（部署时由 CI/CD 注入，非密钥信息）
+    _endpoint = '{oss_endpoint}'
+    _bucket   = '{oss_bucket}'
+
+    # AK/SK 由 CI/CD 在部署时注入到脚本内容
+    # TODO: 后续可迁移为 DataWorks RAM 角色认证，彻底消除密钥注入
+    _ak = '{ak}'
+    _sk = '{sk}'
+
+    # 文件路径由上游赋值节点通过 DataWorks 参数机制传入（sys.argv[1]）
+    _file_path = ''
+    if len(_sys.argv) > 1:
+        _file_path = _sys.argv[1].strip()
+
+    # ✅ Bug Fix #8 (move_parquet): 接收不到文件路径时主动退出报错
+    if not _file_path:
+        print('ERROR: 未接收到来自上游赋值节点的文件路径，停止执行！', file=_sys.stderr)
+        _sys.exit(1)
+
+    print(f'接收到文件路径: {{_file_path}}')
+    result = move_to_completed(_ak, _sk, _endpoint, _bucket, _file_path)
+
+    if result is None:
+        print('ERROR: 文件移动失败（路径层级不足或 OSS 操作异常）', file=_sys.stderr)
+        _sys.exit(1)
 """
 
-    upstream_assignment_node_name = base_node_name + "_upstream"
-
-    # 包装为 DW API Spec
+    # ── 构建 DataWorks FlowSpec dict ─────────────────────────────────
     spec_dict = {
         "version": "1.1.0",
         "kind": "CycleWorkflow",
         "spec": {
             "nodes": [
                 {
-                    "recurrence": "Normal",
-                    "maxInternalConcurrency": 0,
-                    "timeout": 0,
-                    "timeoutUnit": "HOURS",
-                    "instanceMode": "Immediately",
-                    "rerunMode": "Allowed",
-                    "rerunTimes": 0,
-                    "rerunInterval": 180000,
+                    "recurrence":             node_config.get("recurrence", "Normal"),
+                    "maxInternalConcurrency": int(node_config.get("maxInternalConcurrency", 0)),
+                    "timeout":                int(node_config.get("timeout", 0)),
+                    "timeoutUnit":            node_config.get("timeoutUnit", "HOURS"),
+                    "instanceMode":           node_config.get("instanceMode", "Immediately"),
+                    "rerunMode":              node_config.get("rerunMode", "Allowed"),
+                    "rerunTimes":             int(node_config.get("rerunTimes", 0)),
+                    "rerunInterval":          int(node_config.get("rerunInterval", 180000)),
                     "script": {
-                        "path": node_name,
-                        "language": "python3",   # 用户提供的使用了 python3
+                        "path":     node_name,
+                        "language": language,
                         "runtime": {
-                            "command": "PYTHON",
-                            "commandTypeId": 1322,
-                            "cu": "0.5"
+                            "command":       "PYTHON",
+                            "commandTypeId": command_type_id,
+                            "cu":            cu,
                         },
-                        "content": executable_script,
+                        "content": node_script_content,
+                        # 接收上游赋值节点（_upstream）产出的文件名，通过 sys.argv[1] 传入脚本
                         "parameters": [
                             {
                                 "artifactType": "Variable",
-                                "name": "args",  # Python 节点的参数，作为 sys.argv[1] 传入
-                                "scope": "NodeParameter",
-                                "type": "NoKvVariableExpression",
-                                # 动态绑定上游赋值节点的 output 名。
-                                # 用户在集成节点和下游节点都可以通过调度变量引用赋值节点的产出。
-                                "value": f"${{{upstream_assignment_node_name}.outputs}}"
+                                "name":         "-",   # ✅ Bug Fix #9: 严格对齐参考脚本，使用 "匿名参数" 标记
+                                "scope":        "NodeParameter",
+                                "type":         "NoKvVariableExpression",
+                                "value":        file_path_param_value,
                             }
-                        ]
+                        ],
                     },
                     "trigger": {
-                        "type": "Scheduler",
-                        "cron": cron_expr,
-                        "cycleType": "NotDaily",
-                        "startTime": "1970-01-01 00:00:00",
-                        "endTime": "9999-01-01 00:00:00",
-                        "timezone": "Asia/Shanghai",
-                        "delaySeconds": 0
+                        "type":         "Scheduler",
+                        "cron":         cron_expr,
+                        "cycleType":    node_config.get("cycleType", "NotDaily"),
+                        "startTime":    node_config.get("startTime", "1970-01-01 00:00:00"),
+                        "endTime":      node_config.get("endTime",   "9999-01-01 00:00:00"),
+                        "timezone":     node_config.get("timezone",  "Asia/Shanghai"),
+                        "delaySeconds": int(node_config.get("delaySeconds", 0)),
                     },
                     "runtimeResource": {
-                        "resourceGroup": resource_group
+                        "resourceGroup": resource_group,
                     },
-                    "name": node_name,
+                    "name":  node_name,
                     "owner": owner_id,
                 }
             ],
-            # 将依赖指向 Data Integration 节点，确保证据链：Upstream (获取) -> Integration (入库) -> Downstream (移动)
+            # 下游节点依赖数据集成节点（DI node），确保链路：
+            #   Upstream（获取文件名） → Integration（入库） → Downstream（移动文件）
             "flow": [
                 {
                     "depends": [
                         {
-                            "type": "Normal",
-                            "output": upstream_output_name,
-                            "sourceType": "Manual"
+                            "type":         "Normal",
+                            "output":       upstream_di_output,
+                            "sourceType":   "Manual",
+                            # ✅ Bug Fix #10: 严格对齐参考脚本，补充 refTableName 字段
+                            "refTableName": upstream_di_output,
                         }
                     ]
                 }
-            ]
-        }
+            ],
+        },
     }
-    
+
     return spec_dict, node_name
 
 
-def create_dw_downstream_node(config, project_dir, env):
+# ─────────────────────────────────────────────────────────────────────────────
+# 创建 / 更新节点
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_dw_downstream_node(node_config: dict) -> None:
     """
-    创建 DataWorks 下游清理节点
+    对 DataWorks 下游 Python 节点执行 upsert（存在则更新，不存在则创建）。
+
+    Args:
+        node_config : 由 load_merged_downstream_config() 返回的合并配置 dict
     """
-    client = create_client()
-    
-    project_id = config.get("metadata", {}).get("projectId")
-    if not project_id:
-        logger.error("projectId not found in config.metadata")
+    # ── 1. 获取运行时凭证 ─────────────────────────────────────────────
+    ak = _get_env_or_fail("ALIBABA_CLOUD_ACCESS_KEY_ID")
+    sk = _get_env_or_fail("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+
+    # ── 2. 确定 project_id（环境变量优先，配置文件兜底）────────────────
+    # ✅ Bug Fix #4: 优先使用环境变量，与上游节点行为一致
+    project_id_str = (
+        os.environ.get("DATAWORKS_PROJECT_ID", "").strip()
+        or node_config.get("project_id", "")
+    )
+    if not project_id_str:
+        logger.error("project_id 未配置：请设置环境变量 DATAWORKS_PROJECT_ID 或检查 integration-config.json")
         sys.exit(1)
-        
-    ak = get_env_or_fail("ALIBABA_CLOUD_ACCESS_KEY_ID")
-    sk = get_env_or_fail("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
-    
-    spec_dict, node_name = build_downstream_node_spec(config, project_dir, env, ak, sk)
+    project_id = int(project_id_str)
+
+    # ── 3. 构建 spec ─────────────────────────────────────────────────
+    spec_dict, node_name = build_downstream_node_spec(node_config, ak, sk)
     spec_json = json.dumps(spec_dict, ensure_ascii=False)
-    
-    logger.info(f"Preparing to upsert DOWNSTREAM node: {node_name}")
-    
-    # 检查节点是否存在
+
+    logger.info(f"开始 upsert 下游节点: {node_name}  (project_id={project_id})")
+
+    # ── 4. 初始化 DataWorks 客户端 ────────────────────────────────────
+    client = create_client()
+
+    # ── 5. 检查节点是否已存在 ─────────────────────────────────────────
     ds_file_id = get_node_id(client, project_id, node_name)
-    
+
     if ds_file_id:
-        logger.info(f"[UPDATE] Downstream Node '{node_name}' already exists. Updating...")
+        # ── UPDATE 分支 ──────────────────────────────────────────────
+        logger.info(f"[UPDATE] 节点 '{node_name}' 已存在 (file_id={ds_file_id})，执行增量更新...")
         update_node(client, project_id, ds_file_id, spec_dict)
+
     else:
-        logger.info(f"[CREATE] Downstream Node '{node_name}' not found. Creating new node...")
-        create_node_request = dataworks_public_20240518_models.CreateNodeRequest(
+        # ── CREATE 分支 ──────────────────────────────────────────────
+        logger.info(f"[CREATE] 节点 '{node_name}' 不存在，开始创建...")
+        create_req = dw_models.CreateNodeRequest(
             project_id=project_id,
             spec=spec_json,
-            scene='DATAWORKS_PROJECT'
+            scene="DATAWORKS_PROJECT",
         )
         runtime = util_models.RuntimeOptions()
         try:
-            resp = client.create_node_with_options(create_node_request, runtime)
+            resp = client.create_node_with_options(create_req, runtime)
             logger.info("✓ 创建成功！")
+            logger.info(json.dumps(resp.body.to_map(), indent=2, ensure_ascii=False))
         except Exception as error:
-            logger.error(f"✗ 创建失败: {error}")
-            import traceback
+            logger.error(f"✗ 创建失败: {getattr(error, 'message', str(error))}")
+            if hasattr(error, "data") and error.data:
+                logger.error(f"  阿里云建议: {error.data.get('Recommend', '')}")
             traceback.print_exc()
+            # ✅ Bug Fix #3: 创建失败时退出非零，确保 CI 感知失败
+            sys.exit(1)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Create Downstream File Move Node")
-    parser.add_argument("--project-dir", required=True, help="项目目录 (如 features/test-feature)")
-    parser.add_argument("--env", required=True, help="环境名称 (如 dev, qa)")
+# ─────────────────────────────────────────────────────────────────────────────
+# 入口
+# ─────────────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="创建或更新 DataWorks 下游 Python 节点（Parquet 文件移动）")
+    parser.add_argument("--project-dir", required=True,
+                        help="Feature 项目目录，如 features/test-feature")
+    parser.add_argument("--env", required=True,
+                        help="部署环境，如 dev / qa / preprod / prod")
     args = parser.parse_args()
-    
-    config = load_merged_node_config(args.project_dir, args.env)
-    
-    # 创建（或更新）DataWorks 下游节点
-    create_dw_downstream_node(config, args.project_dir, args.env)
+
+    # 加载三层合并配置
+    node_config = load_merged_downstream_config(args.project_dir, args.env)
+
+    logger.info("=== 合并后配置（脱敏）===")
+    for k, v in node_config.items():
+        logger.info(f"  {k}: {v}")
+    logger.info("=" * 40)
+
+    create_dw_downstream_node(node_config)
 
 
 if __name__ == "__main__":
