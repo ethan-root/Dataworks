@@ -38,14 +38,16 @@ def create_dw_delete_node(config, project_dir, env):
     # 获取需要清理的表名和要保留的个数
     writer_config = config.get("writer", {})
     table_name = writer_config.get("table", "unknown_table")
-    mc_project = config.get("datasource", {}).get("mc", {}).get("project", "unknown_project")
+    mc_config = config.get("datasource", {}).get("mc", {})
+    mc_project = mc_config.get("project", "unknown_project")
+    mc_endpoint = mc_config.get("endpoint", "")
     
     # 从 setting-<env>.json["task"] 获取保留的分区个数配置，默认保留 30 个
     retention_count = task_config.get("mc_partition_retention", 30)
     
     # 注入到 DW 节点脚本中的 Python 片段
     script_content = f"""# CI/CD 自动创建下游节点 - 清理 MaxCompute 旧分区
-# 策略：按个数保留最新 {{retention}} 个分区，删除其余的
+# 策略：按个数保留最新 {retention_count} 个分区，删除其余的
 
 from odps import ODPS
 import os
@@ -53,7 +55,7 @@ import os
 # 读取 DataWorks 环境变量中的 AK/SK，或者通过绑定的数据源执行
 access_id = os.environ.get('ALIBABA_CLOUD_ACCESS_KEY_ID')
 secret_key = os.environ.get('ALIBABA_CLOUD_ACCESS_KEY_SECRET')
-endpoint = '{config.get("datasource", {{}}).get("mc", {{}}).get("endpoint")}'
+endpoint = '{mc_endpoint}'
 project_name = '{mc_project}'
 table_name = '{table_name}'
 retention_count = {retention_count}
