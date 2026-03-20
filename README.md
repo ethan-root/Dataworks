@@ -147,7 +147,89 @@ PARTITIONED BY (pt STRING);
 - 回写文件名入库确保极高幂等性 (Idempotent)。 
 
 ### 4. 发布与提交指令（`publish_node.py`）
+### 4. 发布与提交指令（`publish_node.py`）
 底层借助 DataWorks Node Deploy 接口完成三阶段标准下发动作：
 - `BUILD_PACKAGE` 打包发版。
 - `PROD_CHECK` 强制触发质量、发布规约校验规则检测防泄漏。
 - `PROD` 切流生效发布上线。
+
+---
+
+## 🔑 环境变量（GitHub Secrets）
+
+| Secret 名称 | 说明 |
+|---|---|
+| `DATAWORKS_PROJECT_ID` | DataWorks 工作空间 ID |
+| `ALIYUN_ACCESS_KEY_ID` | 阿里云 AccessKey ID |
+| `ALIYUN_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret |
+| `ALIYUN_REGION` | 地域（如 `cn-shanghai`）|
+| `MAXCOMPUTE_PROJECT` | MaxCompute 项目名 |
+| `MAXCOMPUTE_ENDPOINT` | MaxCompute API Endpoint |
+| `SONAR_TOKEN` | （可选）SonarCloud 扫描令牌 |
+| `GITGUARDIAN_API_KEY` | （可选）GitGuardian API Key |
+
+**本地开发调试**：
+
+```bash
+export ALIBABA_CLOUD_ACCESS_KEY_ID="xxx"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="xxx"
+export ALIYUN_REGION="cn-shanghai"
+export DATAWORKS_PROJECT_ID="xxxxxx"
+export MAXCOMPUTE_PROJECT="your_mc_project"
+export MAXCOMPUTE_ENDPOINT="http://service.cn-shanghai.maxcompute.aliyun.com/api"
+
+# 本地模拟一次 dev 环境部署（无需触发 GitHub Actions）
+python scripts/ci_runner.py --feature-list my-new-feature --env dev
+```
+
+---
+
+## 📜 Scripts 脚本核心逻辑
+
+### 编排层
+
+#### `ci_runner.py` — 部署总指挥
+
+被 `_deploy_env.yml` 中的一行调用，封装了完整的创建/更新决策逻辑：
+
+```text
+接收 --feature-list 和 --env 参数
+  └── 遍历每个 feature
+       ├── 校验目录和 setting-<env>.json 是否存在
+       ├── 调用 check_integration_node.py → 判断节点存在与否
+       │    ├── 节点已存在 → UPDATE 分支 (全流程同步)
+       │    │    ├── 运行 create_table 更新 Schema
+       │    │    ├── 运行 create_upstream_node 全量检查
+       │    │    ├── 运行 update_integration_node 注入最新参数
+       │    │    └── 运行下游/清理节点同步 + publish_node.py 下发生产
+       │    └── 节点不存在 → CREATE 分支 (全流程创建)
+       │         ├── check/create OSS/MC 数据源
+       │         └── 循序递进完成：表创建 -> 节点依序创建 -> 发布上线
+```
+
+---
+
+### 节点辅助操作脚本群
+
+#### `check_integration_node.py`
+1. 从 `config_merger` 读取 `node_name`
+2. 调用 `get_node_id()` 精确查找
+3. **退出码约定**：找到 → `exit 0`；未找到 → `exit 1`（`ci_runner.py` 依赖此做 create/update 分支判断）
+
+#### `create_integration_node.py` / `update_integration_node.py`
+1. `ci_runner` 各自调用的主要钩子。合并完整配置（含 Schema-Driven 字段映射与最新血缘依赖）
+2. 借用客户端的内置差异化阻断控制台打印对比情况，只有当发生参数内容跳变时，才会借由 `UpdateNode` 切流重组。
+
+#### 数据源探活与补偿（`check_xx_ds` / `create_xx_ds`）
+- 采取主动侦测机制，遇到 OpenAPI 报错 "400 名称重复" 等已存在特性时静默吞噬返回真值，确保无状态集群能够极速放行流水线工作车间。
+
+---
+
+### 辅助与治理工具
+
+#### `validate_row_count.py` — 行数对比验证（部署卡点测试工具）
+- 利用 `pyodps` 双重并发比对 OSS 外表映射层与实际落库层的行数。不一致时拦截部署管道防止脏数据混入。
+
+#### `clean_mc_tables.py` — MaxCompute 保土机制（运维常驻脚本）
+- 依据生命周期法则全域清扫老旧落灰的数据中转或隔离表，采用软白名单模式 (`WHITELIST_TABLES`) 保证沙箱隔离。
+
