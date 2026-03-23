@@ -65,13 +65,13 @@ def create_client() -> DataWorksPublicClient:
 def _call_with_retry(func, *args, **kwargs):
     """
     包装 DataWorks API 调用，遇到 Throttling.Resource 限流时自动采用指数退避加随机抖动进行重试。
-    最大重试 4 次，延迟分别为 ~1s, ~2s, ~4s, ~8s
+    最大重试 10 次，延迟呈指数级增长，足以对抗长时间限流。
     """
-    max_retries = 4
+    max_retries = 10
     for i in range(max_retries):
         try:
-            # 每次请求前默认停顿 0.5 秒缓解基础并发压力
-            time.sleep(0.5)
+            # 每次请求前默认停顿 1.0 秒缓解基础并发压力
+            time.sleep(1.0)
             return func(*args, **kwargs)
         except Exception as error:
             msg = getattr(error, 'message', str(error))
@@ -81,7 +81,7 @@ def _call_with_retry(func, *args, **kwargs):
             is_throttled = ("Throttling" in msg) or ("9990040003" in msg) or ("429" in str(code))
             
             if is_throttled and i < max_retries - 1:
-                wait_time = (2 ** i) + random.uniform(0.1, 1.0)
+                wait_time = (2 ** (i + 1)) + random.uniform(0.5, 2.0)
                 print(f"   [WARN] API 限流 (Throttling.Resource)，等待 {wait_time:.2f}s 后进行第 {i+1} 次重试...")
                 time.sleep(wait_time)
             else:
@@ -437,6 +437,37 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
     else:
         local_spec  = json.loads(build_spec(config))
     remote_spec = _get_remote_spec(client, project_id, node_id)
+
+    # === 智能避让：继承远端自动生成的属性，避免无意义的配置 Diff ===
+    if remote_spec and "spec" in remote_spec and "nodes" in remote_spec["spec"] and len(remote_spec["spec"]["nodes"]) > 0:
+        remote_node = remote_spec["spec"]["nodes"][0]
+        local_node = local_spec["spec"]["nodes"][0]
+        
+        # 1. 保留远端自动生成的 ID 标记
+        if "id" in remote_node:
+            local_node["id"] = remote_node["id"]
+        if "script" in remote_node and "script" in local_node and "id" in remote_node["script"]:
+            local_node["script"]["id"] = remote_node["script"]["id"]
+            
+        # 2. 保留核心不可变元数据
+        if "metadata" in remote_node:
+            if "metadata" not in local_node:
+                local_node["metadata"] = dict(remote_node["metadata"])
+            else:
+                for k in ["uuid", "createTime", "modifyTime", "projectId", "tenantId", "owner", "ownerName", "project"]:
+                    if k in remote_node["metadata"] and k not in local_node["metadata"]:
+                        local_node["metadata"][k] = remote_node["metadata"][k]
+
+        # 3. 保留自动创建的输入输出参数（如赋值节点的 outputs 数据结构）
+        if "inputs" not in local_node and "inputs" in remote_node:
+            local_node["inputs"] = dict(remote_node["inputs"])
+        if "outputs" not in local_node and "outputs" in remote_node:
+            local_node["outputs"] = dict(remote_node["outputs"])
+            
+        # 4. 保留自动映射的系统根节点 Flow 依赖（如果本地配置为空）
+        if "flow" in remote_spec["spec"] and len(remote_spec["spec"]["flow"]) > 0:
+            if "flow" not in local_spec["spec"] or len(local_spec["spec"]["flow"]) == 0:
+                local_spec["spec"]["flow"] = list(remote_spec["spec"]["flow"])
 
     print("\n   🔎 正在对比本地配置与远端节点配置...")
     diff_count = _print_diff(local_spec, remote_spec)
