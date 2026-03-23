@@ -1,24 +1,24 @@
 {
     "datasource": {
         "oss": {
-            "name": "oss_demo_final_01",
+            "name": "oss_demo_final_02",
             "bucket": "parquet-test1",
             "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com"
         },
         "mc": {
-            "name": "mc_demo_final_01",
+            "name": "mc_demo_final_02",
             "project": "maxcompute_parquet_test",
             "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
         }
     },
     "task": {
-        "node_name": "update_task_final_01",
+        "node_name": "update_task_final_02",
         "description": "final e2e regression test",
         "cron": "00 30 00-23/1 * * ?",
-        "reader_datasource": "oss_demo_final_01",
+        "reader_datasource": "oss_demo_final_02",
         "reader_path": "${outputs}",
-        "writer_datasource": "mc_demo_final_01",
-        "writer_table": "feature_demo_final_01",
+        "writer_datasource": "mc_demo_final_02",
+        "writer_table": "feature_demo_final_02",
         "writer_partition": "pt='${bizdate}'",
         "reader_prefix": "camos/test_feature/",
         "mc_partition_retention": 30
