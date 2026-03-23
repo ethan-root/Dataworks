@@ -11,8 +11,7 @@ Dataworks/
 ├── .github/workflows/               # CI/CD 流水线定义
 │   ├── datawork_node_create_update.yml  # 主流水线（Push/手动触发，全量节点组装与创建/更新）
 │   ├── _deploy_env.yml              # 可复用工作流（单环境部署，调用 ci_runner.py）
-│   ├── database_update.yml          # DDL 执行流水线
-│   └── pr_validation.yml            # PR 安全扫描（SonarCloud/GitGuardian）
+│   └── database_update.yml          # DDL 执行流水线
 │
 ├── configuration/                   # 全局底板配置（系统级参数，无需业务人员修改）
 │   ├── integration-config.json      # 数据集成节点系统级底板
@@ -42,7 +41,6 @@ Dataworks/
     ├── create_upstream_node.py      # 上游 Python 节点生成器（拉取处理）
     ├── create_integration_node.py   # 核心 DI 数据集成节点生成/对比器
     ├── create_downstream_node.py    # 下游归档移动节点生成器
-    ├── create_python_cp_node.py     # 分区自动清理节点生成器
     └── publish_node.py              # 三阶段打样与真实环境发布工具
 ```
 
@@ -269,6 +267,4 @@ python scripts/ci_runner.py --feature-list my-new-feature --env dev
 #### `validate_row_count.py` — 行数对比验证（部署卡点测试工具）
 - 利用 `pyodps` 双重并发比对 OSS 外表映射层与实际落库层的行数。不一致时拦截部署管道防止脏数据混入。
 
-#### `clean_mc_tables.py` — MaxCompute 保土机制（运维常驻脚本）
-- 依据生命周期法则全域清扫老旧落灰的数据中转或隔离表，采用软白名单模式 (`WHITELIST_TABLES`) 保证沙箱隔离。
 

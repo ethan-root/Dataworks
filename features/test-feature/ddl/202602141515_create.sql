@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS feature_demo_test_01(
+CREATE TABLE IF NOT EXISTS feature_demo_final_01(
 `name`                          STRING COMMENT '',
 `age`                           STRING COMMENT '',
 `location`                      STRING COMMENT ''
