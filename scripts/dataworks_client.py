@@ -67,7 +67,7 @@ def _call_with_retry(func, *args, **kwargs):
     包装 DataWorks API 调用，遇到 Throttling.Resource 限流时自动采用指数退避加随机抖动进行重试。
     最大重试 10 次，延迟呈指数级增长，足以对抗长时间限流。
     """
-    max_retries = 10
+    max_retries = 7
     for i in range(max_retries):
         try:
             # 每次请求前默认停顿 1.0 秒缓解基础并发压力
@@ -81,8 +81,9 @@ def _call_with_retry(func, *args, **kwargs):
             is_throttled = ("Throttling" in msg) or ("9990040003" in msg) or ("429" in str(code))
             
             if is_throttled and i < max_retries - 1:
-                wait_time = (2 ** (i + 1)) + random.uniform(0.5, 2.0)
-                print(f"   [WARN] API 限流 (Throttling.Resource)，等待 {wait_time:.2f}s 后进行第 {i+1} 次重试...")
+                # 指数退避，但最大单次等待不超过 30 秒，防止 CI 流水线过长假死
+                wait_time = min(30.0, (2 ** (i + 1))) + random.uniform(0.5, 2.0)
+                print(f"   [WARN] API 限流 (Throttling.Resource)，等待 {wait_time:.2f}s 后进行第 {i+1} 次重试...", flush=True)
                 time.sleep(wait_time)
             else:
                 raise
@@ -287,7 +288,7 @@ def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str) 
     Returns:
         节点 ID（int）；未找到时返回 None
     """
-    print(f"🔍 检查项目 {project_id} 中是否存在节点 '{node_name}'...")
+    print(f"🔍 检查项目 {project_id} 中是否存在节点 '{node_name}'...", flush=True)
     request = dw_models.ListFilesRequest(
         project_id=project_id,
         exact_file_name=node_name,
@@ -492,8 +493,9 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
             print(f"   ❌ 节点更新返回失败。RequestId={resp.body.request_id}")
             raise RuntimeError("UpdateNode returned success=False")
     except Exception as error:
-        msg = error.message if hasattr(error, "message") else str(error)
+        msg = getattr(error, "message", str(error))
         print(f"   ❌ 节点更新失败: {msg}")
-        if hasattr(error, "data") and error.data:
-            print(error.data.get("Recommend", ""))
+        err_data = getattr(error, "data", None)
+        if err_data and isinstance(err_data, dict):
+            print(err_data.get("Recommend", ""))
         raise
