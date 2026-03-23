@@ -8,7 +8,7 @@ on:
 
 jobs:
   code_scan:
-    name: Code Scan (Sonar & GitGuardian)
+    name: Code Scan (安全扫描)
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -16,13 +16,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Code Scan Placeholder
+      - name: Sonar && GitGuardian 占位符
         run: |
-          echo "🚀 Triggering code scan (SonarQube & GitGuardian)..."
-          echo "✅ Code scan passed."
+          echo "🚀 正在触发代码质量与安全扫描 (SonarQube & GitGuardian)..."
+          echo "✅ 扫描通过。"
 
   sql_mutability_check:
-    name: DDL Mutability Check
+    name: DDL Mutability Check (历史 DDL 防篡改校验)
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -30,27 +30,29 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # 必须拉取完整 Git 历史，用于后续的 diff 差异对比
 
-      - name: Run Git-based DDL Mutability Validation
+      - name: 运行基于 Git 的 DDL 防篡改校验
         run: |
-          echo "🔄 Fetching target branch: ${{ github.base_ref }}..."
+          echo "🔄 正在拉取目标合并分支: ${{ github.base_ref }}..."
           git fetch origin ${{ github.base_ref }}
           
-          echo "🔍 Checking for modified or deleted historical SQL files in features/*/ddl/ ..."
+          echo "🔍 正在扫查 features/*/ddl/ 目录下是否存在被修改或删除的历史 SQL 文件..."
           
+          # 核心逻辑：使用 git diff 检测所有变更的文件。若 ddl 目录下的 .sql 文件处于 修改(M)、删除(D)、重命名(R) 或 复制(C) 状态，将予以拦截。
+          # 注意：纯新增(A)状态是合法的，因为通过新建 .sql 脚本进行操作是迭代表结构的唯一合规方式。
           VIOLATIONS=$(git diff --name-status origin/${{ github.base_ref }}...HEAD | grep -E '^[MDRC]\s+.*features/[^/]+/ddl/.*\.sql$' || true)
           
           if [ -n "$VIOLATIONS" ]; then
-            echo "::error title=Historical DDL Modified::❌ CRITICAL ERROR: Historical DDL files were modified or deleted!"
+            echo "::error title=历史 DDL 被恶意修改::❌ 严重违规：历史 DDL 脚本被修改或删除！"
             echo ""
-            echo "The following SQL files have been tampered with:"
+            echo "以下 SQL 文件在此次 PR 中遭到了篡改或删除："
             echo "$VIOLATIONS"
             echo ""
-            echo "🚨 Rule Violation: Historical executable SQL scripts in the ddl/ directories are strictly IMMUTABLE."
-            echo "💡 Fix: If you need to change a table schema (e.g. add a column), please CREATE A NEW .sql FILE (e.g., an ALTER TABLE script) instead of updating existing, already-executed ones."
-            echo "Please revert these changes in your branch to pass this check."
+            echo "🚨 安全规范：已经存在于主干分支 (features/*/ddl/) 的历史建表 SQL 脚本具有【绝对不可变性 (Immutable)】。"
+            echo "💡 修复指引：如果您需要变更表结构（例如新增字段、修改表名），请您务必【新建一个全新的 .sql 文件】（例如创建一个新的 ALTER TABLE 脚本），绝不允许直接改动以前的同名旧文件！"
+            echo "请在您的分支中 Revert（回退）上述文件的修改，然后重新提交，即可通过本校验。"
             exit 1
           else
-            echo "✅ Validation Passed: No historical DDL files were modified. All changes are either new files or non-DDL files."
+            echo "✅ 校验通过：未检测到历史 DDL 被篡改。所有变更均合法（纯新增 DDL 或其它业务代码变更）。"
           fi
