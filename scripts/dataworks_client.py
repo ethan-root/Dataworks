@@ -217,6 +217,9 @@ def build_spec(config: dict) -> str:
     if "metadata" in config:
         node_def["metadata"] = config["metadata"]
 
+    if "inputs" in config:
+        node_def["inputs"] = config["inputs"]
+
     spec_dict = {
         "version": "1.1.0",
         "kind": "CycleWorkflow",

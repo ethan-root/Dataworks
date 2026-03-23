@@ -34,6 +34,23 @@ def process_project(client, project_id: int, project_dir: str, env: str) -> None
             "sourceType": "Manual",
             "refTableName": upstream_node_name
         }]
+        config["inputs"] = {
+            "variables": [
+                {
+                    "artifactType": "Variable",
+                    "inputName": "outputs",
+                    "name": "outputs",
+                    "scope": "NodeContext",
+                    "type": "NodeOutput",
+                    "value": "${outputs}",
+                    "node": {
+                        "nodeId": str(upstream_node_id),
+                        "output": str(upstream_node_id),
+                        "refTableName": upstream_node_name
+                    }
+                }
+            ]
+        }
 
     print(f"\n{'='*50}")
     print(f"Processing (Upsert): {node_name}  (dir: {project_dir})")
@@ -63,6 +80,23 @@ def create_project(client, project_id: int, project_dir: str, env: str) -> None:
             "sourceType": "Manual",
             "refTableName": upstream_node_name
         }]
+        config["inputs"] = {
+            "variables": [
+                {
+                    "artifactType": "Variable",
+                    "inputName": "outputs",
+                    "name": "outputs",
+                    "scope": "NodeContext",
+                    "type": "NodeOutput",
+                    "value": "${outputs}",
+                    "node": {
+                        "nodeId": str(upstream_node_id),
+                        "output": str(upstream_node_id),
+                        "refTableName": upstream_node_name
+                    }
+                }
+            ]
+        }
     else:
         print(f"   [WARN] 未找到上游节点 '{upstream_node_name}'，已跳过数据依赖配置。")
 

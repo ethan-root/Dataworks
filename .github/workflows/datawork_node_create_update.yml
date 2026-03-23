@@ -115,7 +115,7 @@ jobs:
   deploy-qa:
     name: "🟡 Deploy → QA"
     needs: [detect, deploy-dev]
-    if: needs.detect.outputs.feature_list != ''
+    if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "qa"
@@ -134,7 +134,7 @@ jobs:
   deploy-preprod:
     name: "🟠 Deploy → PRE-PROD"
     needs: [detect, deploy-qa]
-    if: needs.detect.outputs.feature_list != ''
+    if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "preprod"
@@ -154,7 +154,7 @@ jobs:
   deploy-prod:
     name: "🔴 Deploy → PROD  🔒 (Requires Approval)"
     needs: [detect, deploy-preprod]
-    if: needs.detect.outputs.feature_list != ''
+    if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "prod"

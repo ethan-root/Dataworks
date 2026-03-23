@@ -211,6 +211,23 @@ if __name__ == '__main__':
                     },
                     "name":  node_name,
                     "owner": owner_id,
+                    "inputs": {
+                        "variables": [
+                            {
+                                "artifactType": "Variable",
+                                "inputName": "outputs",
+                                "name": "outputs",
+                                "scope": "NodeContext",
+                                "type": "NodeOutput",
+                                "value": "${outputs}",
+                                "node": {
+                                    "nodeId": str(upstream_node_id),
+                                    "output": str(upstream_node_id),
+                                    "refTableName": upstream_assignment_node
+                                }
+                            }
+                        ]
+                    }
                 }
             ],
             # 下游节点依赖上游赋值节点和数据集成节点（DI node），确保链路完整
