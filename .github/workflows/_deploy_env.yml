@@ -41,6 +41,7 @@ jobs:
     environment: ${{ inputs.env_name }}
 
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       # ── DataWorks / 阿里云凭证（由主流水线传入）──────────────────
       DATAWORKS_PROJECT_ID:            ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}

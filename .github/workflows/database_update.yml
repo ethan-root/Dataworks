@@ -49,6 +49,7 @@ on:
       - ".github/workflows/database_update.yml"
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
   MAXCOMPUTE_PROJECT:              ${{ secrets.MAXCOMPUTE_PROJECT }}
