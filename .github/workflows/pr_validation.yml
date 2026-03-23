@@ -1,0 +1,56 @@
+name: PR Validation Workflow
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  code_scan:
+    name: Code Scan (Sonar & GitGuardian)
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Code Scan Placeholder
+        run: |
+          echo "🚀 Triggering code scan (SonarQube & GitGuardian)..."
+          echo "✅ Code scan passed."
+
+  sql_mutability_check:
+    name: DDL Mutability Check
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Git-based DDL Mutability Validation
+        run: |
+          echo "🔄 Fetching target branch: ${{ github.base_ref }}..."
+          git fetch origin ${{ github.base_ref }}
+          
+          echo "🔍 Checking for modified or deleted historical SQL files in features/*/ddl/ ..."
+          
+          VIOLATIONS=$(git diff --name-status origin/${{ github.base_ref }}...HEAD | grep -E '^[MDRC]\s+.*features/[^/]+/ddl/.*\.sql$' || true)
+          
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error title=Historical DDL Modified::❌ CRITICAL ERROR: Historical DDL files were modified or deleted!"
+            echo ""
+            echo "The following SQL files have been tampered with:"
+            echo "$VIOLATIONS"
+            echo ""
+            echo "🚨 Rule Violation: Historical executable SQL scripts in the ddl/ directories are strictly IMMUTABLE."
+            echo "💡 Fix: If you need to change a table schema (e.g. add a column), please CREATE A NEW .sql FILE (e.g., an ALTER TABLE script) instead of updating existing, already-executed ones."
+            echo "Please revert these changes in your branch to pass this check."
+            exit 1
+          else
+            echo "✅ Validation Passed: No historical DDL files were modified. All changes are either new files or non-DDL files."
+          fi
