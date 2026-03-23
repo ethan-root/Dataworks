@@ -16,6 +16,10 @@ from dataworks_client import create_client, get_node_id
 from config_merger import load_merged_node_config
 
 def main():
+    """
+    节点校验主入口：调用精确查找 API 检查特定名称的 Data integration 节点是否存在于目标工作空间内。
+    此结果用于向 CI/CD Workflow 回传 exists 状态变量，从而决定是走 CreateNode 还是 UpdateNode 增量发布。
+    """
     parser = argparse.ArgumentParser(description="Check DataWorks Integration Node")
     parser.add_argument(
         "--project-dir", type=str, required=True,

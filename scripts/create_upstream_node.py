@@ -62,7 +62,7 @@ def _load_ref_script() -> str:
     读取 get_earliest_file_name.py 的核心逻辑（截断 main() 之前的部分）。
     使用绝对路径，不依赖 CWD。
     """
-    # ✅ Bug Fix #2: 使用绝对路径，不再依赖 CWD
+    # 确保使用绝对路径加载同一执行目录下的脚本，避免路径依赖问题
     ref_path = SCRIPT_DIR / "get_earliest_file_name.py"
     if not ref_path.exists():
         logger.error(f"参考脚本不存在: {ref_path}")
@@ -91,7 +91,7 @@ def build_upstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
     Returns:
         (spec_dict, node_name) 元组
     """
-    # ✅ Bug Fix #1: 直接从扁平化 dict 读取，不再猜测嵌套层级
+    # 直接从扁平化后的字典中安全读取节点属性
     node_name     = node_config.get("node_name", "upstream_node") + "_upstream"
     cron_expr     = node_config.get("cron",           "00 00 00-23/1 * * ?")
     resource_group = node_config.get("resource_group", "")
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     _prefix   = '{reader_prefix}'
 
     # AK/SK 由 DataWorks 节点参数（name: "-"）传入，格式: "ak,sk"
-    # ✅ Bug Fix #4/#5: AK/SK 通过参数机制传入，不再硬编码在脚本文本中
+    # 第三方 API 凭据（AK/SK）通过 DataWorks 的节点参数机制安全传入，避免硬编码泄露在脚本正文中
     _params = _sys.argv[1].split(',') if len(_sys.argv) > 1 else []
     _ak = _params[0].strip() if len(_params) > 0 else ''
     _sk = _params[1].strip() if len(_params) > 1 else ''
@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
     earliest = get_earliest_parquet_file(_ak, _sk, _endpoint, _bucket, _prefix)
 
-    # ✅ Bug Fix #6: 无文件时主动退出（而非静默），避免下游收到空值
+    # 找不到新文件时抛出异常主动阻断流水线（而非静默处理），以防止下游集成空数据
     if not earliest:
         print('ERROR: No parquet file found in OSS prefix: ' + _prefix, file=_sys.stderr)
         _sys.exit(1)
@@ -164,15 +164,14 @@ if __name__ == '__main__':
                             "cu":            cu,
                         },
                         "content": node_script_content,
-                        # ✅ Bug Fix #4: name="-" 对应参考脚本中验证可用的格式
-                        #                value 在 create_dw_upstream_node() 中事后赋值
+                        # Name 置为 "-" 为兼容工作流的匿名参数传递
                         "parameters": [
                             {
                                 "artifactType": "Variable",
                                 "name":         "-",
                                 "scope":        "NodeParameter",
                                 "type":         "NoKvVariableExpression",
-                                "value":        f"{ak},{sk}",   # ✅ Bug Fix #5
+                                "value":        f"{ak},{sk}",
                             }
                         ],
                     },
@@ -192,7 +191,7 @@ if __name__ == '__main__':
                     "owner": owner_id,
                 }
             ],
-            # ✅ Bug Fix #5 (flow): 参考脚本使用空数组，不构造复杂依赖
+            # 上游节点作为流水线的源头产生数据，不设置先决依赖节点，因此 flow 留空
             "flow": [],
         },
     }
@@ -260,7 +259,7 @@ def create_dw_upstream_node(node_config: dict) -> None:
             if hasattr(error, "data") and error.data:
                 logger.error(f"  阿里云建议: {error.data.get('Recommend', '')}")
             traceback.print_exc()
-            # ✅ Bug Fix #3: 创建失败时退出非零，确保 CI 感知失败
+            # 确保遇到节点创建的致命错误时退出非零状态码，以便中断 CI 流水线
             sys.exit(1)
 
 

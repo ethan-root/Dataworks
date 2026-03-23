@@ -46,7 +46,7 @@ def _parse_all_columns_from_sqls(sql_dir: Path) -> list:
                             if col_name.lower() not in ('primary', 'key', 'unique') and col_name not in columns:
                                 columns.append(col_name)
         except Exception as e:
-            print(f"   [WARN] Failed to parse SQL columns from {filepath.name}: {e}")
+            print(f"   [WARN] 从 {filepath.name} 解析 SQL 字段映射失败: {e}")
             
     return columns
 
@@ -58,7 +58,7 @@ def _load_json_silently(filepath: Path) -> dict:
         with open(filepath, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"   [WARN] Failed to load {filepath.name}: {e}")
+        print(f"   [WARN] 加载配置失败 {filepath.name}: {e}")
         return {}
 
 def _load_base_config(project_dir: str, template_name: str) -> dict:
@@ -77,7 +77,7 @@ def _load_base_config(project_dir: str, template_name: str) -> dict:
         # 回退到当前工作目录下的 configuration
         cfg_path = Path.cwd() / "configuration" / template_name
         if not cfg_path.exists():
-            raise FileNotFoundError(f"Missing required base template: {cfg_path}")
+            raise FileNotFoundError(f"缺少必要的基础模板文件: {cfg_path}")
             
     with open(cfg_path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -138,7 +138,7 @@ def load_merged_node_config(project_dir: str, env: str = "dev") -> dict:
 
             config["reader"]["column"] = reader_cols
             config["writer"]["column"] = writer_cols
-            print(f"   [INFO] Auto-extracted {len(columns)} columns from create-table.sql for Data Integration Mapping.")
+            print(f"   [INFO] 自动从 create-table.sql 中提取了 {len(columns)} 个字段用于数据集成映射。")
 
     return config
 

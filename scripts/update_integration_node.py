@@ -29,7 +29,7 @@ def update_project(client, project_id: int, project_dir: str, args) -> None: # 1
             "refTableName": upstream_node_name
         }]
     else:
-        print(f"   [WARN] Upstream node '{upstream_node_name}' not found. Dependency skipped.")
+        print(f"   [WARN] 未找到上游节点 '{upstream_node_name}'，已跳过数据依赖配置。")
 
     print(f"\n{'='*50}")
     print(f"Updating Node: {node_name}  (dir: {project_dir})")

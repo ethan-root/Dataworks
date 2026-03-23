@@ -88,6 +88,10 @@ def _find_datasource(client, project_id: int, ds_name: str):
     return None
 
 def main():
+    """
+    检查判定主入口：在指定的 MaxCompute (odps) 数据源列表中进行搜寻。
+    若搜寻到指定名称的网关即可确认环境就绪，用于控制后续的发布分层。
+    """
     parser = argparse.ArgumentParser(description="Check DataWorks MaxCompute DataSource")
     parser.add_argument(
         "--project-dir", type=str, required=True,

@@ -14,6 +14,10 @@ from odps import ODPS
 
 
 def get_env_or_fail(name: str) -> str:
+    """
+    强制获取环境变量。
+    缺失时抛出异常并中断验证，保护下游测试不使用空凭证瞎跑。
+    """
     value = os.environ.get(name, "").strip()
     if not value:
         print(f"ERROR: Environment variable '{name}' is required.")
@@ -45,6 +49,10 @@ def print_table_data(o, table_name, label):
 
 
 def main():
+    """
+    验证主入口：执行基于 MaxCompute 的 Union All 比对 SQL，对外部表和内部表的 Count 行数做账平对账。
+    如果不一致将强制抛出 1 返回码，阻塞 GitHub Actions 绿灯放行。
+    """
     parser = argparse.ArgumentParser(description="Validate row counts: external vs internal table")
     parser.add_argument("--ext-table", default="val_feature_demo_ext", help="外部表名")
     parser.add_argument("--int-table", default="user", help="内部表名")

@@ -37,18 +37,18 @@ def main():
     try:
         config = load_merged_node_config(args.project_dir, args.env)
     except FileNotFoundError as e:
-        print(f"ERROR: {e}")
+        print(f"配置加载错误: {e}")
         sys.exit(1)
         
     node_name = config.get("node_name")
     if not node_name:
-        print(f"ERROR: node_name not found in configuration.")
+        print(f"错误: 配置文件中未找到 node_name 属性")
         sys.exit(1)
 
     # ── 2. 读取工作空间 ID ─────────────────────────────────────
     project_id_str = os.environ.get("DATAWORKS_PROJECT_ID", "")
     if not project_id_str:
-        print("ERROR: DATAWORKS_PROJECT_ID not set")
+        print("错误: 环境变量 DATAWORKS_PROJECT_ID 未设置")
         sys.exit(1)
     project_id = int(project_id_str)
 

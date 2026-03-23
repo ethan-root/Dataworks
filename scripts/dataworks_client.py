@@ -45,7 +45,7 @@ def create_client() -> DataWorksPublicClient:
 
     # 如果凭证为空，立即报错退出，避免后续调用报奇怪的错误
     if not access_key_id or not access_key_secret:
-        print("ERROR: ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
+        print("ERROR: 未设置 ALIBABA_CLOUD_ACCESS_KEY_ID 或 ALIBABA_CLOUD_ACCESS_KEY_SECRET 环境变量")
         sys.exit(1)
 
     # 构建 SDK 配置对象
@@ -284,7 +284,7 @@ def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str) 
     Returns:
         节点 ID（int）；未找到时返回 None
     """
-    print(f"🔍 Checking if node '{node_name}' exists in project {project_id}...")
+    print(f"🔍 检查项目 {project_id} 中是否存在节点 '{node_name}'...")
     request = dw_models.ListFilesRequest(
         project_id=project_id,
         exact_file_name=node_name,
@@ -299,17 +299,17 @@ def get_node_id(client: DataWorksPublicClient, project_id: int, node_name: str) 
         )
     except Exception as error:
         msg = error.message if hasattr(error, "message") else str(error)
-        print(f"   ListFiles failed: {msg}")
+        print(f"   ListFiles 查询失败: {msg}")
         return None
 
     if not files:
-        print(f"   Node '{node_name}' not found.")
+        print(f"   未找到节点 '{node_name}'。")
         return None
 
     f = files[0]
     # Data Studio 节点的唯一标识在 ListFiles 里对应 file_id
     ds_node_id = f.file_id
-    print(f"   Found — DataStudio NodeId={ds_node_id} (Scheduled NodeId={f.node_id})")
+    print(f"   已找到 — DataStudio 节点 ID={ds_node_id} (调度节点 ID={f.node_id})")
     return ds_node_id
 
 
@@ -329,7 +329,7 @@ def _get_remote_spec(client: DataWorksPublicClient, project_id: int, node_id: in
             return json.loads(node.spec)
     except Exception as error:
         msg = error.message if hasattr(error, "message") else str(error)
-        print(f"   ⚠️  GetNode failed (diff skipped): {msg}")
+        print(f"   ⚠️  获取节点信息失败（跳过差异对比）: {msg}")
     return {}
 
 
@@ -367,7 +367,7 @@ def _print_diff(local_spec: dict, remote_spec: dict) -> int:
         diff_count: 差异字段数量（0 表示无差异）
     """
     if not remote_spec:
-        print("   (Remote spec unavailable, skipping diff)")
+        print("   (远端节点配置不可用，跳过差异对比)")
         return -1   # -1 表示无法判断
 
     local_flat  = _flatten(local_spec)
@@ -400,12 +400,12 @@ def _print_diff(local_spec: dict, remote_spec: dict) -> int:
             diffs.append((key, remote_val, local_val))
 
     if not diffs:
-        print("   ✅ No differences detected. Node is already up to date.")
+        print("   ✅ 未检测到差异。节点已经是最新配置。")
         return 0
 
-    print(f"   📋 Found {len(diffs)} field(s) with differences:\n")
+    print(f"   📋 发现 {len(diffs)} 个配置差异:\n")
     col_w = max(len(d[0]) for d in diffs) + 2
-    print(f"   {'Field':<{col_w}}  {'Remote (current)':<40}  {'Local (new)'}")
+    print(f"   {'字段':<{col_w}}  {'远端 (当前)':<40}  {'本地 (最新)'}")
     print(f"   {'-'*col_w}  {'-'*40}  {'-'*40}")
     for field, old_val, new_val in diffs:
         old_str = str(old_val)[:38] + ".." if len(str(old_val)) > 40 else str(old_val)
@@ -435,11 +435,11 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
         local_spec  = json.loads(build_spec(config))
     remote_spec = _get_remote_spec(client, project_id, node_id)
 
-    print("\n   🔎 Comparing local config with remote node spec...")
+    print("\n   🔎 正在对比本地配置与远端节点配置...")
     diff_count = _print_diff(local_spec, remote_spec)
 
     if diff_count == 0:
-        print("   Skipping update — nothing changed.")
+        print("   配置无变化，跳过更新。")
         return
 
     # 有差异（或无法拉取远端）则执行更新
@@ -453,13 +453,13 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
     try:
         resp = _call_with_retry(client.update_node_with_options, update_request, runtime)
         if resp.body.success:
-            print(f"   ✅ Node updated successfully. (NodeId={node_id})")
+            print(f"   ✅ 节点更新成功。 (节点 ID={node_id})")
         else:
-            print(f"   ❌ UpdateNode returned success=False. RequestId={resp.body.request_id}")
+            print(f"   ❌ 节点更新返回失败。RequestId={resp.body.request_id}")
             raise RuntimeError("UpdateNode returned success=False")
     except Exception as error:
         msg = error.message if hasattr(error, "message") else str(error)
-        print(f"   ❌ UpdateNode failed: {msg}")
+        print(f"   ❌ 节点更新失败: {msg}")
         if hasattr(error, "data") and error.data:
             print(error.data.get("Recommend", ""))
         raise

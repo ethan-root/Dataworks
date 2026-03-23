@@ -69,6 +69,45 @@ Dataworks/
 
 ---
 
+## 🐣 快速上手 (Quick Start)
+
+如果你是 0 基础的新手，想要把这个项目套用在自己的真实业务上，只需跟着以下 4 步走：
+
+### 第一步：配置 GitHub 密钥 (Secrets)
+项目必须拥有操作你阿里云 DataWorks 的权限。请进入你这个 GitHub 仓库的 `Settings -> Secrets and variables -> Actions`，添加以下机密参数：
+- `ALIBABA_CLOUD_ACCESS_KEY_ID`: 你的阿里云 AccessKey ID
+- `ALIBABA_CLOUD_ACCESS_KEY_SECRET`: 你的阿里云 AccessKey Secret
+- `ALIYUN_REGION`: 你的 DataWorks 所在地域 (如 `cn-shanghai`)
+- `DATAWORKS_PROJECT_ID`: 你 DataWorks 真实工作空间的纯数字 ID
+
+### 第二步：修改项目的全局“底板”参数
+换了新账号或新项目，必须先修改底层网关参数。
+打开 `configuration/integration-config.json` 文件（这是所有集成节点的模板引擎），修改以下核心字段为**你自己的专属值**：
+- `"owner"`: 填你自己的阿里云账号纯数字 UID。
+- `"resource_group"`: 填你实际购买的 DataWorks 独享数据集成资源组标识（Serverless_res_group_xxx）。
+- `"metadata"` 下的 `"owner"` 和 `"project.projectIdentifier"` 等参数也要对应修改为你自己的空间信息。
+*(注：`upstream-node-config.json` 等其他底板文件中的 owner 最好也一并顺手改掉)*
+
+### 第三步：配置你的真实业务参数
+在这个项目中，你几乎永远不需要去碰 `scripts/` 下的 Python 代码，所有开发只需改配置！
+1. 复制现有的 `features/test-feature` 文件夹，将其重命名为你的业务名（比如 `features/my-first-job`）。
+2. 打开里面的 `setting-dev.json`，你会看到业务参数：
+   - 把 `datasource.oss.bucket` 改为你真正的 OSS 桶名称。
+   - 把 `task.reader_prefix` 改为你要读取并同步的真实 OSS 路径。
+   - 把 `task.writer_table` 改为目的端的真实表名。
+3. 打开 `ddl/` 目录下的 `.sql` 文件，按你实际需求编写真实的 `CREATE TABLE` 表结构。表结构中的字段，系统会自动解析并跟你的 JSON 配置融合成精准的同步映射！
+
+### 第四步：一键推送，自动建成！
+把上面的修改保存，执行提交并将代码 Push 到 `main` 分支：
+```bash
+git add .
+git commit -m "feat: run my first dataworks job"
+git push origin main
+```
+接下来，只要打开 GitHub 仓库的 **Actions** 页面，你就能看到一个机器人正在自动帮你执行建表、拼接节点、连线关联等工作，并最终把完整的链路原封不动地发布到你的 DataWorks 开发环境中去！
+
+---
+
 ## ✍️ 业务开发指南
 
 ### 新建一个 Feature（数据集成任务流）

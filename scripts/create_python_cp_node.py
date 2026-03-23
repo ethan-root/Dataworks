@@ -224,7 +224,7 @@ def main():
     logger.info(f"Processing create_python_cp_node.py (Delete Node)")
     
     if args.node_type == "cp":
-        logger.error("Error: --node-type cp is deprecated. Use get_earliest_parquet.py / create_upstream_node.py instead.")
+        logger.error("错误: --node-type cp 已被废弃。请使用 get_earliest_parquet.py 或 create_upstream_node.py。")
         sys.exit(1)
     
     config = load_merged_node_config(args.project_dir, args.env)

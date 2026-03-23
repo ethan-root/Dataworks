@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+move_parquet_to_completed.py
+职责：数据被成功集成到 MaxCompute 之后，将源端的 Parquet 文件移动到 OSS 的 completed 存档目录。
+作为下游纯 Python 节点运行，确保数据不会被重复消费。
+"""
 import logging
 import json
 import oss2
@@ -48,6 +53,9 @@ def move_to_completed(access_key_id, access_key_secret, endpoint, bucket_name, f
 
 
 def main():
+    """
+    命令行运行主入口：通过 argparse 获取 OSS 密钥、源端点及需要转移的绝对路径并执行文件转移。
+    """
     parser = argparse.ArgumentParser(description='将 OSS 文件移动到 completed 目录')
     parser.add_argument('--access-id', default='YOUR_ACCESS_KEY', help='AccessKey ID')
     parser.add_argument('--secret-key', default='YOUR_SECRET_KEY', help='AccessKey Secret')
@@ -67,6 +75,10 @@ def main():
 
 
 def handler(event, context):
+    """
+    阿里云 Function Compute 兼容入口。
+    允许将此移动脚本打包至函数计算直接供 DataWorks 事件驱动调用。
+    """
     # evt = json.loads(event)
     main()
     logger = logging.getLogger()

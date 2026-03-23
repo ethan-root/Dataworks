@@ -26,6 +26,10 @@ WHITELIST_TABLES = [
 ]
 
 def get_env_or_fail(name: str) -> str:
+    """
+    安全读取环境变量，如果该变量未定义或为空则立刻抛出并退出解释器。
+    用于强制保障 CI/CD 必需凭证必须全部就绪，拒绝带病运行。
+    """
     value = os.environ.get(name, "").strip()
     if not value:
         print(f"ERROR: Environment variable '{name}' is required.")
@@ -33,6 +37,10 @@ def get_env_or_fail(name: str) -> str:
     return value
 
 def main():
+    """
+    MaxCompute 陈旧数据表清理的主入口函数。
+    支持 dry-run 演练模式（只打印不删表），支持按照创建时间自动淘汰冗余沙箱表。
+    """
     import argparse
     parser = argparse.ArgumentParser(description="Clean old MaxCompute tables")
     parser.add_argument("--execute", action="store_true", help="实际执行删除操作（不传则为 dry-run）")

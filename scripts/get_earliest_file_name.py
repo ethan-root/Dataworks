@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+get_earliest_file_name.py
+职责：轮询阿里云 OSS Bucket 指定前缀下的所有 parquet 文件，提取时间戳并返回最早的一份。
+作为上游赋值节点（CONTROLLER_ASSIGNMENT）的核心逻辑，为下游数据集成节点提供动态读取路径。
+"""
 import logging
 import json
 import oss2
@@ -73,7 +78,9 @@ def get_earliest_parquet_file(access_key_id, access_key_secret, endpoint, bucket
     return earliest_file['path']
 
 def main():
-    """主函数"""
+    """
+    独立运行主函数：解析命令行传递的 OSS 鉴权信息及路径前缀，调用核心提取逻辑。
+    """
     parser = argparse.ArgumentParser(description='获取 OSS 目录下最早的 parquet 文件')
     parser.add_argument('--access-id', default='YOUR_ACCESS_KEY', help='AccessKey ID')
     parser.add_argument('--secret-key', default='YOUR_SECRET_KEY', help='AccessKey Secret')
@@ -99,6 +106,10 @@ def main():
         return None
 
 def handler(event, context):
+    """
+    Serverless/FunctionCompute (FC) 兼容的执行入口。
+    供阿里云函数计算等云原生环境调用。
+    """
     # evt = json.loads(event)
     main()
     logger = logging.getLogger()

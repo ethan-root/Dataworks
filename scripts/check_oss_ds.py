@@ -89,6 +89,10 @@ def _find_datasource(client, project_id: int, ds_name: str):
     return None
 
 def main():
+    """
+    检查判定主入口：读取目标环境配置，如果找到名为 ds_name 的 OSS 数据源即返回 0 退出，否则以非 0 状态码终止流程。
+    用于在 CI 管道中判断是否需要走创建节点（Create OSS Data Source）分支。
+    """
     parser = argparse.ArgumentParser(description="Check DataWorks OSS DataSource")
     parser.add_argument(
         "--project-dir", type=str, required=True,

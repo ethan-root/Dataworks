@@ -18,19 +18,32 @@ from odps.errors import ODPSError
 import argparse
 
 def calculate_file_hash(file_path):
+    """
+    计算文件的 MD5 哈希值。
+    用于记录 DDL 文件是否发生过篡改或变更，作为 database_changelog 表的校验依据。
+    """
     md5_hash = hashlib.md5()
     with open(file_path, "rb") as f:
+        # 分块读取大文件以节省内存
         for chunk in iter(lambda: f.read(4096), b""):
             md5_hash.update(chunk)
     return md5_hash.hexdigest()
 
 def extract_timestamp_from_filename(filename):
+    """
+    从 SQL 文件名中提取前置的时间戳。
+    例如从 '202602141515_create.sql' 提取 '202602141515'，用于保证 SQL 脚本按时间线线性执行。
+    """
     match = re.match(r'^(\d{10,14})', filename)
     if match:
         return match.group(1)
     return None
 
 def get_sorted_sql_files(directory):
+    """
+    扫描指定目录下的所有 .sql 文件，并按时间戳排序。
+    返回列表供自动化发布引擎顺次执行，保证数据库的版本状态单向演进。
+    """
     dir_path = Path(directory)
     if dir_path.name != 'ddl':
         dir_path = dir_path / 'ddl'
@@ -40,6 +53,7 @@ def get_sorted_sql_files(directory):
         return []
     
     sql_files = []
+    # 遍历该目录下所有 .sql 文件
     for file in dir_path.glob("*.sql"):
         filename = file.name
         timestamp = extract_timestamp_from_filename(filename)
@@ -50,12 +64,17 @@ def get_sorted_sql_files(directory):
                 'timestamp': timestamp
             })
         else:
-            print(f"⚠ 跳过文件（无时间戳前缀）: {filename}")
+            print(f"⚠ 跳过文件（无时间戳前缀规范）: {filename}")
     
+    # 强制让所有 SQL 依照时间先后排序执行
     sql_files.sort(key=lambda x: x['timestamp'])
     return sql_files
 
 def check_if_executed(o, ddl_file):
+    """
+    查询中心 Changelog 元数据表，验证当前 SQL 文件是否已经在远端 MaxCompute 执行成功过。
+    以此保证 CI/CD 流程多次反复触发具备幂等性（Idempotent），不会重复建表或抛错。
+    """
     sql = f"""
     SELECT COUNT(*) as cnt
     FROM database_changelog
@@ -66,10 +85,14 @@ def check_if_executed(o, ddl_file):
             for record in reader:
                 return record['cnt'] > 0
     except Exception as e:
-        print(f"⚠ 检查执行记录失败: {e}")
+        print(f"⚠ 检查执行记录失败（可能是表不存在导致）: {e}")
         return False
 
 def extract_table_name_from_sql(sql_content):
+    """
+    利用正则表达式从 SQL 内容中粗略提取目标表明。
+    用于写入 database_changelog 进行影响记录和可视化显示。
+    """
     patterns = [
         r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[a-zA-Z0-9_]+\.)?`?([a-zA-Z0-9_]+)`?',
         r'ALTER\s+TABLE\s+(?:[a-zA-Z0-9_]+\.)?`?([a-zA-Z0-9_]+)`?',

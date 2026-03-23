@@ -66,7 +66,7 @@ def _load_ref_script() -> str:
     读取 move_parquet_to_completed.py 的核心逻辑（截断 main() 之前的部分）。
     使用绝对路径，不依赖 CWD。
     """
-    # ✅ Bug Fix #2: 使用绝对路径，不再依赖 CWD
+    # 确保使用绝对路径加载同一执行目录下的脚本，避免因不同执行路径产生引用失败
     ref_path = SCRIPT_DIR / "move_parquet_to_completed.py"
     if not ref_path.exists():
         logger.error(f"参考脚本不存在: {ref_path}")
@@ -103,7 +103,7 @@ def build_downstream_node_spec(node_config: dict, ak: str, sk: str, upstream_nod
     Returns:
         (spec_dict, node_name) 元组
     """
-    # ✅ Bug Fix #1: 直接从扁平化 dict 读取，不再猜测嵌套层级
+    # 从合并好的扁平字典中清晰读取各个维度的变量值
     base_node_name  = node_config.get("node_name", "downstream_node")
     node_name       = base_node_name + "_downstream"
     cron_expr       = node_config.get("cron",             "00 00 00-23/1 * * ?")
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     if len(_sys.argv) > 1:
         _file_path = _sys.argv[1].strip()
 
-    # ✅ Bug Fix #8 (move_parquet): 接收不到文件路径时主动退出报错
+    # 当未能从上游获取参数时主动退出，避免抛出底层执行异常
     if not _file_path:
         print('ERROR: 未接收到来自上游赋值节点的文件路径，停止执行！', file=_sys.stderr)
         _sys.exit(1)
@@ -190,7 +190,7 @@ if __name__ == '__main__':
                         "parameters": [
                             {
                                 "artifactType": "Variable",
-                                "name":         "-",   # ✅ Bug Fix #9: 严格对齐参考脚本，使用 "匿名参数" 标记
+                                "name":         "-",   # 使用 DataWorks 约定的匿名参数符号 "-" 保证正确传递
                                 "scope":        "NodeParameter",
                                 "type":         "NoKvVariableExpression",
                                 "value":        file_path_param_value,
@@ -254,7 +254,7 @@ def create_dw_downstream_node(node_config: dict) -> None:
     sk = _get_env_or_fail("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
 
     # ── 2. 确定 project_id（环境变量优先，配置文件兜底）────────────────
-    # ✅ Bug Fix #4: 优先使用环境变量，与上游节点行为一致
+    # 优先使用环境变量以便在多空间 CI 部署中灵活切换，同时保留配置文件为回滚保障
     project_id_str = (
         os.environ.get("DATAWORKS_PROJECT_ID", "").strip()
         or node_config.get("project_id", "")
@@ -302,7 +302,7 @@ def create_dw_downstream_node(node_config: dict) -> None:
             if hasattr(error, "data") and error.data:
                 logger.error(f"  阿里云建议: {error.data.get('Recommend', '')}")
             traceback.print_exc()
-            # ✅ Bug Fix #3: 创建失败时退出非零，确保 CI 感知失败
+            # 遇到致命错误时通知操作环境立刻终止构建流程
             sys.exit(1)
 
 

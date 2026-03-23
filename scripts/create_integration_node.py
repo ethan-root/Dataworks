@@ -64,7 +64,7 @@ def create_project(client, project_id: int, project_dir: str, env: str) -> None:
             "refTableName": upstream_node_name
         }]
     else:
-        print(f"   [WARN] Upstream node '{upstream_node_name}' not found. Dependency skipped.")
+        print(f"   [WARN] 未找到上游节点 '{upstream_node_name}'，已跳过数据依赖配置。")
 
     print(f"\n{'='*50}")
     print(f"Creating Node: {node_name}  (dir: {project_dir})")
