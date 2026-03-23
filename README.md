@@ -9,6 +9,7 @@
 ```text
 Dataworks/
 ├── .github/workflows/               # CI/CD 流水线定义
+│   ├── pr_validation.yml            # ★ PR合并前安全检查（历史 SQL 防篡改拦截）
 │   ├── datawork_node_create_update.yml  # 主流水线（Push/手动触发，全量节点组装与创建/更新）
 │   ├── _deploy_env.yml              # 可复用工作流（单环境部署，调用 ci_runner.py）
 │   └── database_update.yml          # DDL 执行流水线
@@ -64,6 +65,16 @@ Dataworks/
 6. 🚀 **触发流水线自动化发布工作**。
 
 **多环境串行流转**：`dev → qa → preprod → prod`，每个环境使用对应的 `setting-<env>.json` 注入环境独立配方参数，`prod` 需 GitHub Environment 人工审批介入。
+
+### 2. PR 安全防篡改代码审查流水线 (`pr_validation.yml`)
+
+**触发条件**：
+- 开发人员发起向 `main` 或 `dev` 的 Pull Request (合并请求) 时自动触发。
+
+**核心拦截能力**：
+- 🛡️ **Git-based DDL Mutability Check (历史 DDL 防篡改校验)**：通过纯 Git 原生特性 (`git diff --name-status`)，毫秒级侦测 PR 中是否恶意修改或删除了 `features/*/ddl/` 下已经发布过的历史老 `.sql` 文件。
+- 零数据库网络依赖、零 AK/SK 密文泄漏风险。
+- **强制规范规约**：强制打断企图覆盖老历史表结构的动作（Cancel PR），逼迫开发者必须经过**“新建增量 `.sql` 文件”**才是演进表结构的唯一合法途径，100% 捍卫生产数据基线安全。
 
 ---
 
@@ -172,11 +183,12 @@ PARTITIONED BY (pt STRING);
 1. **获取底板**：从 `configuration/` 拾取无生命的原型 JSON 或 python 源码。
 2. **叠加环境字典**：把 `setting-<env>.json` 中的定制参数暴力注入原型的血肉中。
 3. **DDL 增量词法透视 (`_parse_all_columns_from_sqls`)**：脚本会自动按时间戳遍历这个环境自古至今所有跑过的 DDL 文件，利用正则提取所有的 `CREATE` 和 `ALTER ADD COLUMNS` 列记录，智能像滚雪球一般拼装出当前时刻这张表完整的“表结构画像”，然后自动转化填装至集成节点的数组映射关系里！无须人为维护繁琐 Mapping！
+4. **节点变量透传编织**：自动扫描上游节点（如拉取最新 Parquet 文件的 Python 节点）产生的临时变量输出，自动捕获并在下层核心的数据集成甚至下游归档组件中，用 `${变量名}` 做全链路的无缝参数传递与串联。
 
 ### 2. DataWorks API 万能外壳（`dataworks_client.py`）
 该文件不单单是 SDK 调用器，更是包含了极具韧性的防御设施：
-* **内置抗限流防护 (`_call_with_retry`)**：DataWorks 公共云拥有极低阈值的 QPS OpenAPI 请求频率。当大批量全量部署或创建时极易触发 `Throttling.Resource 400` 错误。此客户端拦截了所有查/改/写流量，一旦触碰警报，自适应执行 0.5s~8s 的指数安全退避 (Exponential Backoff)，保障流水线面对万级任务依旧固若金汤不崩溃。
-* **差异对比更新工具**：内置了远端拉取 JSON Schema 的扁平拍平对比函数。在 Upsert 时能精确打印本地与远端究竟相差哪几个字符，只对实质变更文件下达指令，0 差异则强制忽略避免无谓耗费版本发布资源。
+* **内置抗限流防护 (`_call_with_retry`)**：DataWorks 公共云拥有极低阈值的 QPS OpenAPI 请求频率。当大批量全量部署或创建时极易触发 `Throttling.Resource 400` 错误。此客户端拦截了所有查/改/写流量，施加了严格的串行限制锁并配置了安全封顶的指数退避 (Exponential Backoff)，保障流水线面对部署洪峰依旧固若金汤不崩溃。
+* **智能 Diff 防损耗阀（保护每日 API 余额护城河）**：除了 QPS，非企业版 DataWorks 每日有 100~1000 次死线限额。客户端内置了极其深度的远端配置拉取与跨层级扁平拍平对比函数 (AST Level Diff)。在发起 `UpdateNode` 前，能自动脱敏规避系统生成的随机 UUID/时间戳区别。只针对有效业务修改（如字段映射变化、脚本语言替换、资源组换绑）才下达 API 请求。若完全一致则直接 `Return` 斩断无意义更新，**每日为公司主账号节省数以百计的珍贵 API 调用计费配额**。
 
 ### 3. DDL 时序跟踪表机制（`create_table.py`）
 依靠事先创建位于共享元数据目录 `shared/ddl-metadata.sql` 里的跟踪表 `database_changelog`。每次读取前获取已加载文件名：
