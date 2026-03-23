@@ -196,7 +196,6 @@ PARTITIONED BY (pt STRING);
 - 回写文件名入库确保极高幂等性 (Idempotent)。 
 
 ### 4. 发布与提交指令（`publish_node.py`）
-### 4. 发布与提交指令（`publish_node.py`）
 底层借助 DataWorks Node Deploy 接口完成三阶段标准下发动作：
 - `BUILD_PACKAGE` 打包发版。
 - `PROD_CHECK` 强制触发质量、发布规约校验规则检测防泄漏。
