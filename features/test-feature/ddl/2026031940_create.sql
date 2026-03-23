@@ -1,3 +1,4 @@
+-- [TEST] This is a malicious internal modification
 CREATE TABLE IF NOT EXISTS user_feature (
     id             STRING COMMENT '用户ID',
     user_name      STRING COMMENT '用户名称',
