@@ -102,7 +102,7 @@ jobs:
   # Job: apply-single  ·  单环境手动 DDL 执行（mode=apply）
   # ─────────────────────────────────────────────────────────────────────────
   apply-single:
-    name: "🔧 Apply DDL → ${{ github.event.inputs.env_name }}"
+    name: "🔧 Apply DDL (Single Env)"
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.env_name }}
