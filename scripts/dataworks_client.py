@@ -479,6 +479,12 @@ def update_node(client: DataWorksPublicClient, project_id: int, node_id: int, co
         if "flow" in remote_spec["spec"] and len(remote_spec["spec"]["flow"]) > 0:
             if "flow" not in local_spec["spec"] or len(local_spec["spec"]["flow"]) == 0:
                 local_spec["spec"]["flow"] = list(remote_spec["spec"]["flow"])
+            else:
+                # 若本地有自定义依赖，需要确保传入 remote_spec 的 nodeId，否则 API 可能静默丢弃
+                remote_flow = remote_spec["spec"]["flow"][0]
+                local_flow = local_spec["spec"]["flow"][0]
+                if "nodeId" in remote_flow and "nodeId" not in local_flow:
+                    local_flow["nodeId"] = remote_flow["nodeId"]
 
     logger.info("🔎 正在对比本地配置与远端节点配置...")
     diff_count = _print_diff(local_spec, remote_spec)
