@@ -19,7 +19,7 @@ def update_project(client, project_id: int, project_dir: str, args) -> None: # 1
     config = load_merged_node_config(args.project_dir, args.env)
     node_name = config["node_name"]
     
-    upstream_node_name = f"{node_name}_upstream"
+    upstream_node_name = config.get("upstream_node_name", f"{node_name}_upstream")
     upstream_node_id = get_node_id(client, project_id, upstream_node_name)
     if upstream_node_id:
         config["depends"] = [{

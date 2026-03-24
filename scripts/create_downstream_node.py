@@ -284,7 +284,8 @@ def create_dw_downstream_node(node_config: dict) -> None:
     # ── 3. 初始化 DataWorks 客户端并获取前置节点 ID ───────────────────
     client = create_client()
     base_node_name = node_config.get("node_name", "downstream_node")
-    upstream_node_id = get_node_id(client, project_id, f"{base_node_name}_upstream")
+    upstream_node_name = node_config.get("upstream_node_name", f"{base_node_name}_upstream")
+    upstream_node_id = get_node_id(client, project_id, upstream_node_name)
     integration_node_id = get_node_id(client, project_id, base_node_name)
 
     # ── 4. 构建 spec ─────────────────────────────────────────────────

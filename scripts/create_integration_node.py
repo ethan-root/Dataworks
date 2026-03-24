@@ -25,7 +25,7 @@ def process_project(client, project_id: int, project_dir: str, env: str) -> None
     config = load_merged_node_config(project_dir, env)
     node_name = config["node_name"]
     
-    upstream_node_name = f"{node_name}_upstream"
+    upstream_node_name = config.get("upstream_node_name", f"{node_name}_upstream")
     upstream_node_id = get_node_id(client, project_id, upstream_node_name)
     if upstream_node_id:
         config["depends"] = [{
@@ -71,7 +71,7 @@ def create_project(client, project_id: int, project_dir: str, env: str) -> None:
     config = load_merged_node_config(project_dir, env)
     node_name = config["node_name"]
     
-    upstream_node_name = f"{node_name}_upstream"
+    upstream_node_name = config.get("upstream_node_name", f"{node_name}_upstream")
     upstream_node_id = get_node_id(client, project_id, upstream_node_name)
     if upstream_node_id:
         config["depends"] = [{
