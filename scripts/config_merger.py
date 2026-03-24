@@ -8,20 +8,31 @@ config_merger.py
 
 import json
 import re
+import logging
 from pathlib import Path
+from typing import List, Dict, Any
 
-def _parse_all_columns_from_sqls(sql_dir: Path) -> list:
+# 配置模块日志
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+def _parse_all_columns_from_sqls(sql_dir: Path) -> List[str]:
     """内部辅助：从 ddl 目录下所有的 .sql 文件中汇总提取出所有的字段名"""
     columns = []
     
     sql_files = sorted(list(sql_dir.glob("*.sql"))) if sql_dir.exists() else []
+    
+    # 匹配 CREATE TABLE (...) 或 ALTER TABLE ADD COLUMNS (...)
+    # 使用正则表达式寻找列名，支持反引号和普通字母下划线格式
+    # 忽略注释、空行以及常见的建立约束的保留字（如 PRIMARY KEY）
+    
+    col_pattern = re.compile(r'^\s*(?:`([^`]+)`|([a-zA-Z_][a-zA-Z0-9_]*))\s+[A-Za-z]+')
     
     for filepath in sql_files:
         try:
             content = filepath.read_text(encoding="utf-8")
             
             # 使用一个稍微通用的正则找出字段块：
-            # 它可以匹配 `CREATE TABLE xxx (...)` 也可以匹配 `ALTER TABLE xxx ADD COLUMNS (...)`
             matches = re.finditer(r'(?:CREATE\s+TABLE|ADD\s+COLUMNS)[^(]*\((.*?)\)(?:\s*(?:COMMENT|PARTITIONED|;|\Z)|$)', content, re.IGNORECASE | re.DOTALL)
             
             for match in matches:
@@ -31,26 +42,23 @@ def _parse_all_columns_from_sqls(sql_dir: Path) -> list:
                     line = line.strip()
                     if not line or line.startswith('--') or line.startswith('//'):
                         continue
-                        
-                    # 尝试提取反引号的内容 `col_name`
-                    col_match = re.search(r'`([^`]+)`', line)
+                    
+                    # 剥离最后的逗号
+                    line = line.rstrip(',')
+                    
+                    # 使用强大的正则精准提取该行的字段名
+                    col_match = col_pattern.match(line)
                     if col_match:
-                        col_name = col_match.group(1)
-                        if col_name not in columns:
-                            columns.append(col_name)
-                    else:
-                        # 获取该行的第一个单词
-                        parts = line.split()
-                        if parts:
-                            col_name = parts[0].strip()
-                            if col_name.lower() not in ('primary', 'key', 'unique') and col_name not in columns:
+                        col_name = col_match.group(1) or col_match.group(2)
+                        if col_name and col_name.upper() not in ('PRIMARY', 'KEY', 'UNIQUE', 'CONSTRAINT', 'INDEX'):
+                            if col_name not in columns:
                                 columns.append(col_name)
         except Exception as e:
-            print(f"   [WARN] 从 {filepath.name} 解析 SQL 字段映射失败: {e}")
+            logger.warning(f"从 {filepath.name} 解析 SQL 字段映射失败: {e}")
             
     return columns
 
-def _load_json_silently(filepath: Path) -> dict:
+def _load_json_silently(filepath: Path) -> Dict[str, Any]:
     """内部辅助：静默读取 json 文件，不存在或报错时返回空字典"""
     if not filepath.exists():
         return {}
@@ -58,10 +66,10 @@ def _load_json_silently(filepath: Path) -> dict:
         with open(filepath, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"   [WARN] 加载配置失败 {filepath.name}: {e}")
+        logger.warning(f"加载配置失败 {filepath.name}: {e}")
         return {}
 
-def _load_base_config(project_dir: str, template_name: str) -> dict:
+def _load_base_config(project_dir: str, template_name: str) -> Dict[str, Any]:
     """内部辅助：向上遍历寻找 configuration 文件夹读取基础模板配置，不存在则抛出异常"""
     cfg_path = None
     current = Path(project_dir).resolve()
@@ -82,7 +90,7 @@ def _load_base_config(project_dir: str, template_name: str) -> dict:
     with open(cfg_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def load_merged_node_config(project_dir: str, env: str = "dev") -> dict:
+def load_merged_node_config(project_dir: str, env: str = "dev") -> Dict[str, Any]:
     """
     加载节点任务配置（用于 process_project.py）：
     读取 integration-config.json 底板，并将 setting-<env>.json 中 [task] 的值覆盖上去。
@@ -138,12 +146,12 @@ def load_merged_node_config(project_dir: str, env: str = "dev") -> dict:
 
             config["reader"]["column"] = reader_cols
             config["writer"]["column"] = writer_cols
-            print(f"   [INFO] 自动从 create-table.sql 中提取了 {len(columns)} 个字段用于数据集成映射。")
+            logger.info(f"自动从 create-table.sql 中提取了 {len(columns)} 个字段用于数据集成映射。")
 
     return config
 
 
-def load_merged_oss_ds_config(project_dir: str, env: str = "dev") -> dict:
+def load_merged_oss_ds_config(project_dir: str, env: str = "dev") -> Dict[str, Any]:
     """
     加载 OSS 数据源配置（用于 create_oss_ds.py）：
     读取 oss-datasource.json 底板，并将 setting-<env>.json 中 [oss_datasource] 的值覆盖上去。
@@ -165,7 +173,7 @@ def load_merged_oss_ds_config(project_dir: str, env: str = "dev") -> dict:
     return config
 
 
-def load_merged_mc_ds_config(project_dir: str, env: str = "dev") -> dict:
+def load_merged_mc_ds_config(project_dir: str, env: str = "dev") -> Dict[str, Any]:
     """
     加载 MaxCompute 数据源配置（用于 create_mc_ds.py）：
     读取 maxcompute-datasource.json 底板，并将 setting-<env>.json 中 [mc_datasource] 的值覆盖上去。
@@ -187,7 +195,7 @@ def load_merged_mc_ds_config(project_dir: str, env: str = "dev") -> dict:
     return config
 
 
-def load_merged_upstream_config(project_dir: str, env: str = "dev") -> dict:
+def load_merged_upstream_config(project_dir: str, env: str = "dev") -> Dict[str, Any]:
     """
     加载上游赋值节点（CONTROLLER_ASSIGNMENT）的完整合并配置。
 
@@ -244,7 +252,7 @@ def load_merged_upstream_config(project_dir: str, env: str = "dev") -> dict:
     return {k: v for k, v in upstream_base.items() if not k.startswith("_comment")}
 
 
-def load_merged_downstream_config(project_dir: str, env: str = "dev") -> dict:
+def load_merged_downstream_config(project_dir: str, env: str = "dev") -> Dict[str, Any]:
     """
     加载下游 Python 节点（PYTHON）的完整合并配置。
 

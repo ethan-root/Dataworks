@@ -4,11 +4,8 @@
 # 触发条件：main 分支有 features/** 目录下的文件变动时自动触发
 #
 # 执行流程：
-#   1. detect    — 扫描 git diff，识别本次推送涉及哪些 feature 文件夹发生了变化
-#   2. deploy-dev     — 部署到 DEV 环境
-#   3. deploy-qa      — 部署到 QA 环境（needs: deploy-dev）
-#   4. deploy-preprod — 部署到 PRE-PROD 环境（needs: deploy-qa）
-#   5. deploy-prod    — 部署到 PROD 环境（needs: deploy-preprod，需要人工审批）
+#   1. detect    — 扫描 git diff，识别本次推送涉及哪些环境的配置发生变动
+#   2. deploy-*  — 四个环境独立并行判断，只部署发生了配置变更的 feature 到对应环境
 #
 # 每个 deploy-* 阶段的具体执行逻辑均委托给可复用工作流：
 #   .github/workflows/_deploy_env.yml
@@ -24,7 +21,8 @@ on:
     branches:
       - main
     paths:
-      - "features/**"   # 仅当 features/ 目录内容发生变化时才触发
+      - "features/**"         # 仅当 features/ 目录内容发生变化时触发
+      - "!features/shared/**" # 忽略 shared 共用目录的变动
   workflow_dispatch:
     inputs:
       features:
@@ -32,28 +30,26 @@ on:
         required: true
         default: 'all'
 
-# ── 全局 secrets（由各 deploy Job 通过 secrets: inherit 向下传递）──────────────
-# secrets 由 GitHub Repository → Settings → Secrets and variables 配置
-# 实际注入在 _deploy_env.yml 中通过 secrets: 字段完成
-# 此处无需声明全局 env，避免在 detect Job 中暴露敏感信息
-
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
   # Job 0 · 检测变更 feature 列表
-  # 通过 git diff 扫描本次 push 涉及的 features/<name>/ 子目录
+  # 通过 git diff 扫描本次 push 涉及的 features/<name>/ 子目录，并拆分到不同环境
   # ─────────────────────────────────────────────────────────────────────────
   detect:
-    name: "🔍 Detect Changed Features"
+    name: "🔍 Detect Changed Features Per Env"
     runs-on: ubuntu-latest
     outputs:
-      feature_list: ${{ steps.resolve.outputs.feature_list }}
+      feature_list_dev: ${{ steps.resolve.outputs.feature_list_dev }}
+      feature_list_qa: ${{ steps.resolve.outputs.feature_list_qa }}
+      feature_list_preprod: ${{ steps.resolve.outputs.feature_list_preprod }}
+      feature_list_prod: ${{ steps.resolve.outputs.feature_list_prod }}
     steps:
       - name: "⬇️  Checkout (full history)"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0    # 拉取完整历史，保证 git diff 能正确比对 BEFORE..AFTER
 
-      - name: "📋 Resolve changed features"
+      - name: "📋 Resolve changed features per environment"
         id: resolve
         shell: bash
         run: |
@@ -61,10 +57,18 @@ jobs:
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.features }}" = "all" ]; then
-              CHANGED_FEATURES="$(ls -1 features/ 2>/dev/null || echo "")"
+              CHANGED_FEATURES="$(ls -1 features/ 2>/dev/null | grep -v '^shared$' || echo "")"
             else
-              CHANGED_FEATURES=$(echo "${{ github.event.inputs.features }}" | tr ',' '\n' | sed 's/^[ \t]*//;s/[ \t]*$//' | grep -v '^$')
+              CHANGED_FEATURES=$(echo "${{ github.event.inputs.features }}" | tr ',' '\n' | sed 's/^[ \t]*//;s/[ \t]*$//' | grep -v '^$' | grep -v '^shared$')
             fi
+            
+            # 手动触发：认为所有指定的 feature 对所有环境都需要执行
+            FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
+            echo "feature_list_dev=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            echo "feature_list_qa=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            echo "feature_list_preprod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            echo "feature_list_prod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            echo "手动调度：所有环境准备部署以下 features: ${FEATURE_LIST}"
           else
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.sha }}"
@@ -74,23 +78,55 @@ jobs:
               BEFORE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
             fi
 
-            # 2. 获取发生变更的集成节点名称
-            # 提取 features/<name>/... 中的 <name> 层作为 feature 标识
+            # 取出变更的 feature 目录，排除 shared
             CHANGED_FEATURES="$(
               git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null \
                 | sed -n 's#^features/\([^/]*\)/.*#\1#p' \
-                | sort -u
+                | grep -v '^shared$' \
+                | sort -u || true
             )"
-          fi
 
-          if [ -z "$CHANGED_FEATURES" ]; then
-            echo "⚠️  未检测到任何待部署的 feature，跳过后续所有 deploy Job。"
-            echo "feature_list=" >> "$GITHUB_OUTPUT"
-          else
-            echo "📋 待部署的 feature(s):"
-            echo "$CHANGED_FEATURES"
-            FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
-            echo "feature_list=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            DEV_FEATURES=""
+            QA_FEATURES=""
+            PREPROD_FEATURES=""
+            PROD_FEATURES=""
+
+            if [ -n "$CHANGED_FEATURES" ]; then
+              for FEATURE in $CHANGED_FEATURES; do
+                # 获取该 feature 下的具体变动文件
+                CHANGES=$(git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null | grep "^features/$FEATURE/" || true)
+                
+                # 如果是 DDL 等变动，往往需要全局同步；如果只改了特定环境的 setting JSON，则只发布特定环境
+                if echo "$CHANGES" | grep -q -E "/ddl/|create-table"; then
+                  DEV_FEATURES="$DEV_FEATURES,$FEATURE"
+                  QA_FEATURES="$QA_FEATURES,$FEATURE"
+                  PREPROD_FEATURES="$PREPROD_FEATURES,$FEATURE"
+                  PROD_FEATURES="$PROD_FEATURES,$FEATURE"
+                else
+                  if echo "$CHANGES" | grep -q "setting-dev.json"; then DEV_FEATURES="$DEV_FEATURES,$FEATURE"; fi
+                  if echo "$CHANGES" | grep -q "setting-qa.json"; then QA_FEATURES="$QA_FEATURES,$FEATURE"; fi
+                  if echo "$CHANGES" | grep -q "setting-preprod.json"; then PREPROD_FEATURES="$PREPROD_FEATURES,$FEATURE"; fi
+                  if echo "$CHANGES" | grep -q "setting-prod.json"; then PROD_FEATURES="$PROD_FEATURES,$FEATURE"; fi
+                fi
+              done
+            fi
+
+            # 整理去除开头的逗号并输出给下一步
+            OUT_DEV=$(echo "$DEV_FEATURES" | sed 's/^,//')
+            OUT_QA=$(echo "$QA_FEATURES" | sed 's/^,//')
+            OUT_PREPROD=$(echo "$PREPROD_FEATURES" | sed 's/^,//')
+            OUT_PROD=$(echo "$PROD_FEATURES" | sed 's/^,//')
+
+            echo "feature_list_dev=$OUT_DEV" >> "$GITHUB_OUTPUT"
+            echo "feature_list_qa=$OUT_QA" >> "$GITHUB_OUTPUT"
+            echo "feature_list_preprod=$OUT_PREPROD" >> "$GITHUB_OUTPUT"
+            echo "feature_list_prod=$OUT_PROD" >> "$GITHUB_OUTPUT"
+            
+            echo "📋 部署分析结果 (独立环境变更):"
+            echo "DEV     : $OUT_DEV"
+            echo "QA      : $OUT_QA"
+            echo "PREPROD : $OUT_PREPROD"
+            echo "PROD    : $OUT_PROD"
           fi
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -99,57 +135,57 @@ jobs:
   deploy-dev:
     name: "🟢 Deploy → DEV"
     needs: detect
-    if: needs.detect.outputs.feature_list != ''
+    if: needs.detect.outputs.feature_list_dev != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "dev"
-      feature_list: ${{ needs.detect.outputs.feature_list }}
+      feature_list: ${{ needs.detect.outputs.feature_list_dev }}
     secrets:
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Job 2 · 部署到 QA 环境（DEV 成功后自动触发）
+  # Job 2 · 部署到 QA 环境（独立并行执行）
   # ─────────────────────────────────────────────────────────────────────────
   deploy-qa:
     name: "🟡 Deploy → QA"
-    needs: [detect, deploy-dev]
-    if: false # needs.detect.outputs.feature_list != ''
+    needs: detect
+    if: needs.detect.outputs.feature_list_qa != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "qa"
-      feature_list: ${{ needs.detect.outputs.feature_list }}
+      feature_list: ${{ needs.detect.outputs.feature_list_qa }}
     secrets:
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Job 3 · 部署到 PRE-PROD 环境（QA 成功后自动触发）
+  # Job 3 · 部署到 PRE-PROD 环境（独立并行执行）
   # ─────────────────────────────────────────────────────────────────────────
   deploy-preprod:
     name: "🟠 Deploy → PRE-PROD"
-    needs: [detect, deploy-qa]
-    if: false # needs.detect.outputs.feature_list != ''
+    needs: detect
+    if: needs.detect.outputs.feature_list_preprod != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "preprod"
-      feature_list: ${{ needs.detect.outputs.feature_list }}
+      feature_list: ${{ needs.detect.outputs.feature_list_preprod }}
     secrets:
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Job 4 · 部署到 PROD 环境（需要 GitHub Environment 人工审批）
-  # 在 Settings → Environments → prod 中配置 Required Reviewers
+  # Job 4 · 部署到 PROD 环境（独立触发）
+  # 注意：虽与其它环境并行触发，但通过 GitHub Environments 配置依然会卡在人工审批。
   # ─────────────────────────────────────────────────────────────────────────
   deploy-prod:
     name: "🔴 Deploy → PROD  🔒 (Requires Approval)"
-    needs: [detect, deploy-preprod]
-    if: false # needs.detect.outputs.feature_list != ''
+    needs: detect
+    if: needs.detect.outputs.feature_list_prod != ''
     uses: ./.github/workflows/_deploy_env.yml
     with:
       env_name: "prod"
-      feature_list: ${{ needs.detect.outputs.feature_list }}
+      feature_list: ${{ needs.detect.outputs.feature_list_prod }}
     secrets:
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
