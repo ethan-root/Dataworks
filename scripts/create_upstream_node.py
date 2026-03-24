@@ -59,11 +59,11 @@ def _get_env_or_fail(name: str) -> str:
 
 def _load_ref_script() -> str:
     """
-    读取 get_earliest_file_name.py 的核心逻辑（截断 main() 之前的部分）。
+    读取 get-parquetname.py 的核心逻辑（截断 main() 之前的部分）。
     使用绝对路径，不依赖 CWD。
     """
     # 确保使用绝对路径加载同一执行目录下的脚本，避免路径依赖问题
-    ref_path = SCRIPT_DIR / "get_earliest_file_name.py"
+    ref_path = SCRIPT_DIR / "get-parquetname.py"
     if not ref_path.exists():
         logger.error(f"参考脚本不存在: {ref_path}")
         sys.exit(1)
@@ -104,7 +104,7 @@ def build_upstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
     language      = node_config.get("language", "odps-sql")
 
     # ── 构建节点执行脚本内容 ─────────────────────────────────────────
-    # 核心逻辑来自 get_earliest_file_name.py（复用，不重复维护）
+    # 核心逻辑来自 get-parquetname.py（复用，不重复维护）
     # OSS 连接参数（非密钥）直接嵌入 content，AK/SK 通过 parameters 传入
     core_logic = _load_ref_script()
 
