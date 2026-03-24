@@ -1,4 +1,4 @@
-﻿# DataWorks DataOps — OSS to MaxCompute
+# DataWorks DataOps — OSS to MaxCompute
 
 基于 **GitHub Actions + Python** 自动化编排 Aliyun DataWorks 数据集成任务，实现配置驱动、多环境串行部署与代码化管理的 DataOps CI/CD 体系。
 
@@ -274,12 +274,6 @@ python scripts/ci_runner.py --feature-list my-new-feature --env dev
 #### 数据源探活与补偿（`check_xx_ds` / `create_xx_ds`）
 - 采取主动侦测机制，遇到 OpenAPI 报错 "400 名称重复" 等已存在特性时静默吞噬返回真值，确保无状态集群能够极速放行流水线工作车间。
 
----
-
-### 辅助与治理工具
-
-#### `validate_row_count.py` — 行数对比验证（部署卡点测试工具）
-- 利用 `pyodps` 双重并发比对 OSS 外表映射层与实际落库层的行数。不一致时拦截部署管道防止脏数据混入。
 
 ---
 
