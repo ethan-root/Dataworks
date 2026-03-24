@@ -1,32 +1,32 @@
-﻿# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-# database_update.yml  路  MaxCompute DDL 鎵ц娴佹按绾?
+# ─────────────────────────────────────────────────────────────────────────────
+# database_update.yml  ·  MaxCompute DDL 执行流水线
 #
-# 瑙﹀彂鏉′欢锛?
-#   1. pull_request 鈫?main锛歅R 鏃舵墽琛?plan锛堟墦鍗板彉鏇存枃浠跺垪琛紝渚?review 鍙傝€冿級
-#   2. workflow_dispatch(mode=plan)锛氭墜鍔?plan锛堟煡鐪嬩細鍙樻洿鍝簺 DDL锛?
-#   3. workflow_dispatch(mode=apply)锛氭墜鍔ㄥ鍗曚釜鐜鎵ц DDL
-#   4. workflow_dispatch(mode=apply_all)锛氫竴閿覆琛屾墽琛屾墍鏈夌幆澧冿紙璁捐鍥炬爣鍑嗘祦绋嬶級
-#                                        椤哄簭锛歞ev 鈫?qa 鈫?pre-prod 鈫?prod
-#                                        prod 鐜闇€浜哄伐鍦?GitHub Environment 瀹℃壒
+# 触发条件：
+#   1. pull_request → main：PR 时执行 plan（打印变更文件列表，供 review 参考）
+#   2. workflow_dispatch(mode=plan)：手动 plan（查看会变更哪些 DDL）
+#   3. workflow_dispatch(mode=apply)：手动对单个环境执行 DDL
+#   4. workflow_dispatch(mode=apply_all)：一键串行执行所有环境（设计图标准流程）
+#                                        顺序：dev → qa → pre-prod → prod
+#                                        prod 环境需人工在 GitHub Environment 审批
 #
-# DDL 骞傜瓑淇濋殰锛歝reate_table.py 涓娇鐢?IF NOT EXISTS锛岄噸澶嶆墽琛屼笉鎶ラ敊
-# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# DDL 幂等保障：create_table.py 中使用 IF NOT EXISTS，重复执行不报错
+# ─────────────────────────────────────────────────────────────────────────────
 name: database_update
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "杩愯妯″紡"
+        description: "运行模式"
         required: true
         default: "plan"
         type: choice
         options:
-          - plan          # 浠呮樉绀哄皢瑕佸彉鏇寸殑 DDL 鏂囦欢锛屼笉鎵ц
-          - apply         # 瀵规寚瀹?env_name 鍗曠嫭鎵ц DDL
-          - apply_all     # 涓茶鎵ц鎵€鏈夌幆澧? dev 鈫?qa 鈫?pre-prod 鈫?prod
+          - plan          # 仅显示将要变更的 DDL 文件，不执行
+          - apply         # 对指定 env_name 单独执行 DDL
+          - apply_all     # 串行执行所有环境: dev → qa → pre-prod → prod
       env_name:
-        description: "鐩爣鐜锛堜粎 apply 妯″紡鏈夋晥锛?
+        description: "目标环境（仅 apply 模式有效）"
         required: false
         default: "dev"
         type: choice
@@ -36,7 +36,7 @@ on:
           - pre-prod
           - prod
       project_name:
-        description: "鍔熻兘鍚嶇О (濡?test-feature)"
+        description: "功能名称 (如 test-feature)"
         required: true
         default: "test-feature"
 
@@ -50,58 +50,58 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # 鈹€鈹€ 鍙湁 AK/SK 淇濈暀鍦?Secrets锛屽叾浣欎粠 JSON 閰嶇疆鏂囦欢璇诲彇 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # 只有 AK/SK 保留在 Secrets，其余从 JSON 配置文件读取
   ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
   ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
-# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-# 鍙鐢ㄥ伐鍏凤細鏍囧噯鍖?DDL 鐩綍锛堝吋瀹规棫鐩綍缁撴瀯锛?
-# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-# 娉細浠ヤ笅 normalize 姝ラ琚涓?job 寮曠敤锛岄€氳繃 outputs 浼犻€?project_dir
+# ─────────────────────────────────────────────────────────────────────────────
+# 可复用工具：标准化 DDL 目录（兼容旧目录结构）
+# ─────────────────────────────────────────────────────────────────────────────
+# 注：以下 normalize 步骤被多个 job 引用，通过 outputs 传递 project_dir
 
 jobs:
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  # Job: plan  路  鎵撳嵃 DDL 鍙樻洿娓呭崟锛圥R 瑙﹀彂 鎴?鎵嬪姩 plan 瑙﹀彂锛?
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job: plan  ·  打印 DDL 变更清单（PR 触发 或 手动 plan 触发）
+  # ─────────────────────────────────────────────────────────────────────────
   plan:
-    name: "馃搵 Plan - Show DDL Changes"
+    name: "📋 Plan - Show DDL Changes"
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'plan')
     runs-on: ubuntu-latest
     steps:
-      - name: "猬囷笍  Checkout"
+      - name: "⬇️  Checkout"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "馃搵 Print changed DDL files"
+      - name: "📋 Print changed DDL files"
         shell: bash
         run: |
           set -euo pipefail
-          echo "鈺斺晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晽"
-          echo "鈺? 馃搵 DDL Plan - 鍙樻洿褰卞搷鍒嗘瀽                     鈺?
-          echo "鈺氣晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨暆"
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║  📋 DDL Plan - 变更影响分析                     ║"
+          echo "╚══════════════════════════════════════════════════╝"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
             CHANGED="$(git diff --name-only "$BASE" "$HEAD" \
               | grep -E '^feature/.*/create-table\.sql|^features/.*/ddl/.*\.sql' || true)"
             if [ -z "$CHANGED" ]; then
-              echo "  鈩癸笍  鏈 PR 鏈秹鍙?DDL 鍙樻洿銆?
+              echo "  ℹ️  本次 PR 未涉及 DDL 变更。"
             else
-              echo "  鍙樻洿鐨?DDL 鏂囦欢濡備笅锛堣纭繚宸查€氳繃 Dev 楠岃瘉鍚庡啀鍚堝苟锛夛細"
-              echo "$CHANGED" | while read -r f; do echo "    馃梻锔? $f"; done
+              echo "  变更的 DDL 文件如下（请确保已通过 Dev 验证后再合并）："
+              echo "$CHANGED" | while read -r f; do echo "    🗂️  $f"; done
             fi
           else
-            echo "  Plan mode锛堟墜鍔ㄨЕ鍙戯級: project=${{ github.event.inputs.project_name }}, env=${{ github.event.inputs.env_name }}"
+            echo "  Plan mode（手动触发）: project=${{ github.event.inputs.project_name }}, env=${{ github.event.inputs.env_name }}"
           fi
 
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  # Job: apply-single  路  鍗曠幆澧冩墜鍔?DDL 鎵ц锛坢ode=apply锛?
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job: apply-single  ·  单环境手动 DDL 执行（mode=apply）
+  # ─────────────────────────────────────────────────────────────────────────
   apply-single:
-    name: "馃敡 Apply DDL (Single Env)"
+    name: "🔧 Apply DDL (Single Env)"
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.env_name }}
@@ -119,8 +119,7 @@ jobs:
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
 
-
-      - name: "馃梻锔? Normalize DDL directory"
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
@@ -148,18 +147,18 @@ jobs:
           fi
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
 
-      - name: "馃搫 Execute DDL"
+      - name: "📄 Execute DDL"
         run: |
           python scripts/create_table.py \
             --project-dir "${{ steps.normalize.outputs.project_dir }}" \
             --env "${{ github.event.inputs.env_name }}"
 
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  # Jobs: apply_all 涓茶妯″紡 鈥?Dev 鈫?QA 鈫?Pre-prod 鈫?Prod
-  # 璁捐鍥炬爣鍑嗘祦绋嬶細涓€閿Е鍙戯紝鍚勭幆澧冮『搴忔墽琛岋紝prod 闇€浜哄伐瀹℃壒
-  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────────────────────────────────────────────────────────────────────
+  # Jobs: apply_all 串行模式 — Dev → QA → Pre-prod → Prod
+  # 设计图标准流程：一键触发，各环境顺序执行，prod 需人工审批
+  # ─────────────────────────────────────────────────────────────────────────
   apply-dev:
-    name: "馃煝 Apply DDL 鈫?DEV"
+    name: "🟢 Apply DDL → DEV"
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
     runs-on: ubuntu-latest
     environment: dev
@@ -178,8 +177,7 @@ jobs:
           MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
-
-      - name: "馃梻锔? Normalize DDL directory"
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
@@ -200,11 +198,11 @@ jobs:
             echo "Project not found: features/${FEATURE_NAME}"; exit 1
           fi
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
-      - name: "馃搫 Execute DDL on DEV"
+      - name: "📄 Execute DDL on DEV"
         run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "dev"
 
   apply-qa:
-    name: "馃煛 Apply DDL 鈫?QA"
+    name: "🟡 Apply DDL → QA"
     needs: apply-dev
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
     runs-on: ubuntu-latest
@@ -222,8 +220,7 @@ jobs:
           MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
-
-      - name: "馃梻锔? Normalize DDL directory"
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
@@ -240,11 +237,11 @@ jobs:
           [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
           cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
-      - name: "馃搫 Execute DDL on QA"
+      - name: "📄 Execute DDL on QA"
         run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "qa"
 
   apply-preprod:
-    name: "馃煚 Apply DDL 鈫?PRE-PROD"
+    name: "🟠 Apply DDL → PRE-PROD"
     needs: apply-qa
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
     runs-on: ubuntu-latest
@@ -262,8 +259,7 @@ jobs:
           MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
-
-      - name: "馃梻锔? Normalize DDL directory"
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
@@ -280,15 +276,15 @@ jobs:
           [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
           cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
-      - name: "馃搫 Execute DDL on PRE-PROD"
+      - name: "📄 Execute DDL on PRE-PROD"
         run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "preprod"
 
   apply-prod:
-    name: "馃敶 Apply DDL 鈫?PROD  馃敀 (Requires Approval)"
+    name: "🔴 Apply DDL → PROD  🔒 (Requires Approval)"
     needs: apply-preprod
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'apply_all'
     runs-on: ubuntu-latest
-    environment: prod    # 闇€瑕?GitHub Environment 鈫?prod 閰嶇疆瀹℃壒浜?
+    environment: prod    # 需要 GitHub Environment → prod 配置审批人
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -302,8 +298,7 @@ jobs:
           MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
-
-      - name: "馃梻锔? Normalize DDL directory"
+      - name: "🗂️  Normalize DDL directory"
         id: normalize
         shell: bash
         run: |
@@ -320,6 +315,5 @@ jobs:
           [ -z "$DDL_FILE" ] && { echo "No DDL SQL found"; exit 1; }
           cp "$DDL_FILE" "${RUNTIME_DIR}/create-table.sql"
           echo "project_dir=${RUNTIME_DIR}" >> "$GITHUB_OUTPUT"
-      - name: "馃搫 Execute DDL on PROD"
+      - name: "📄 Execute DDL on PROD"
         run: python scripts/create_table.py --project-dir "${{ steps.normalize.outputs.project_dir }}" --env "prod"
-
