@@ -21,17 +21,9 @@ on:
         required: true
         type: string
     secrets:
-      DATAWORKS_PROJECT_ID:
-        required: true
       ALIYUN_ACCESS_KEY_ID:
         required: true
       ALIYUN_ACCESS_KEY_SECRET:
-        required: true
-      ALIYUN_REGION:
-        required: true
-      MAXCOMPUTE_PROJECT:
-        required: true
-      MAXCOMPUTE_ENDPOINT:
         required: true
 
 jobs:
@@ -43,12 +35,8 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       # ── DataWorks / 阿里云凭证（由主流水线传入）──────────────────
-      DATAWORKS_PROJECT_ID:            ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-      ALIYUN_REGION:                   ${{ secrets.ALIYUN_REGION }}
-      MAXCOMPUTE_PROJECT:              ${{ secrets.MAXCOMPUTE_PROJECT }}
-      MAXCOMPUTE_ENDPOINT:             ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
     steps:
       # ── 准备：检出代码、安装 Python 依赖 ──────────────────────────
@@ -62,6 +50,18 @@ jobs:
 
       - name: "📦 Install dependencies"
         run: pip install -r scripts/requirements.txt
+
+      - name: "📋 Load env config from JSON files"
+        shell: bash
+        run: |
+          REGION=$(jq -r '.region' configuration/integration-config.json)
+          DW_PROJECT_ID=$(jq -r '.metadata.project.projectId' configuration/integration-config.json)
+          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          echo "ALIYUN_REGION=${REGION}"             >> $GITHUB_ENV
+          echo "DATAWORKS_PROJECT_ID=${DW_PROJECT_ID}" >> $GITHUB_ENV
+          echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"    >> $GITHUB_ENV
+          echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}"  >> $GITHUB_ENV
 
       # ── 核心：调用 Python 编排脚本执行部署 ──────────────────────────
       # 所有业务逻辑（check / create / update / publish）均在
