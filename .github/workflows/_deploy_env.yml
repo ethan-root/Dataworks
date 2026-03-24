@@ -34,6 +34,7 @@ jobs:
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PYTHONUNBUFFERED: "1"
       # ── DataWorks / 阿里云凭证（由主流水线传入）──────────────────
       ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
