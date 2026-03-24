@@ -105,7 +105,7 @@ def build_downstream_node_spec(node_config: dict, ak: str, sk: str, upstream_nod
     """
     # 从合并好的扁平字典中清晰读取各个维度的变量值
     base_node_name  = node_config.get("node_name", "downstream_node")
-    node_name       = base_node_name + "_downstream"
+    node_name       = node_config.get("downstream_node_name", base_node_name + "_downstream")
     cron_expr       = node_config.get("cron",             "00 00 00-23/1 * * ?")
     resource_group  = node_config.get("resource_group",   "")
     owner_id        = node_config.get("owner",            "")
@@ -123,7 +123,7 @@ def build_downstream_node_spec(node_config: dict, ak: str, sk: str, upstream_nod
         sys.exit(1)
 
     # 上游赋值节点的参数引用（文件名传递）
-    upstream_assignment_node = base_node_name + "_upstream"
+    upstream_assignment_node = node_config.get("upstream_node_name", base_node_name + "_upstream")
     file_path_param_value    = f"${{{upstream_assignment_node}.outputs}}"
 
     # ── 构建节点执行脚本内容 ─────────────────────────────────────────

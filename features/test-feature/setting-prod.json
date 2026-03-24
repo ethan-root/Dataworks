@@ -1,18 +1,18 @@
 {
     "datasource": {
         "oss": {
-            "name": "oss_demo",
-            "bucket": "parquet-test1",
-            "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com"
+            "name": "test_oss_01",
+            "bucket": "cus-camos-dataworks-nonprod",
+            "endpoint": "https://oss-cn-hangzhou-internal.aliyuncs.com"
         },
         "mc": {
-            "name": "mc_demo",
-            "project": "maxcompute_parquet_test",
-            "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api"
+            "name": "test_mc_01",
+            "project": "camos_nonprod",
+            "endpoint": "http://service.cn-hangzhou.maxcompute.aliyun-inc.com/api"
         }
     },
     "task": {
-        "node_name": "update_task_3",
+        "node_name": "test_integration_01",
         "cron": "00 10 00-23/1 * * ?",
         "reader_datasource": "oss_demo",
         "reader_path": "parquet/*.parquet",
@@ -20,6 +20,8 @@
         "writer_table": "feature_test_2",
         "writer_partition": "pt='${bizdate}'",
         "reader_prefix": "camos/test_feature/",
-        "mc_partition_retention": 30
+        "mc_partition_retention": 30,
+        "upstream_node_name": "test_updatestream_01",
+        "downstream_node_name": "test_downstream_01"
     }
 }

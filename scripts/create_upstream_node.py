@@ -92,7 +92,7 @@ def build_upstream_node_spec(node_config: dict, ak: str, sk: str) -> tuple:
         (spec_dict, node_name) 元组
     """
     # 直接从扁平化后的字典中安全读取节点属性
-    node_name     = node_config.get("node_name", "upstream_node") + "_upstream"
+    node_name     = node_config.get("upstream_node_name", node_config.get("node_name", "upstream_node") + "_upstream")
     cron_expr     = node_config.get("cron",           "00 00 00-23/1 * * ?")
     resource_group = node_config.get("resource_group", "")
     owner_id      = node_config.get("owner",           "")

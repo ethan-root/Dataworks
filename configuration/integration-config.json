@@ -1,7 +1,7 @@
 {
     "node_name": "update_task_1",
-    "owner": "202997971985675034",
-    "resource_group": "Serverless_res_group_771480527024737_771948044034785",
+    "owner": "5743016457296183",
+    "resource_group": "Serverless_res_group_666685338003137_771961687655072",
     "resourceGroupId": "1000015000128",
     "resourceGroupName": "dataworks_default_resource_group",
     "cu": 0.5,
@@ -43,14 +43,15 @@
     ],
     "metadata": {
         "createTime": "2026-02-13 18:08:48",
-        "owner": "202997971985675034",
-        "ownerName": "202997971985675034",
+        "owner": "5743016457296183",
+        "ownerName": "5743016457296183",
         "project": {
-            "projectIdentifier": "kering_batch_data_dataworks",
-            "projectName": "kering_batch_data_dataworks_workspace",
-            "projectId": "1184689"
+            "projectIdentifier": "camos_dev",
+            "projectName": "camos_dev",
+            "projectId": "559608"
         },
         "projectId": "1184689",
-        "tenantId": "771480527024737"
-    }
+        "tenantId": "5743016457296183"
+    },
+    "region": "cn-hangzhou"
 }

@@ -1,25 +1,21 @@
 {
     "_comment": "下游 Python 节点（PYTHON）稳定配置，极少修改，跨环境共享。",
     "_comment_owner": "DataWorks 节点负责人 ID，修改时需使用 DataWorks 控制台中的用户 UID。",
-
-    "owner": "202997971985675034",
-    "resource_group": "Serverless_res_group_771480527024737_771948044034785",
+    "owner": "5743016457296183",
+    "resource_group": "Serverless_res_group_666685338003137_771961687655072",
     "resourceGroupId": "1000015000128",
     "resourceGroupName": "dataworks_default_resource_group",
-
     "_comment_script": "PYTHON 节点的运行时参数，commandTypeId=1322 对应 DataWorks Python3 节点类型。",
     "language": "python3",
     "command": "PYTHON",
     "commandTypeId": 1322,
     "cu": "0.5",
-
     "_comment_trigger": "调度触发器默认值，cron 表达式会被 setting-<env>.json 中的 task.cron 覆盖。",
     "cycleType": "NotDaily",
     "startTime": "1970-01-01 00:00:00",
     "endTime": "9999-01-01 00:00:00",
     "timezone": "Asia/Shanghai",
     "delaySeconds": 0,
-
     "_comment_node": "节点调度行为默认值。",
     "recurrence": "Normal",
     "maxInternalConcurrency": 0,

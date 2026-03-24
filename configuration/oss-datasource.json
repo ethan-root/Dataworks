@@ -1,6 +1,6 @@
 {
     "name": "oss_demo",
-    "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
-    "bucket": "parquet-test1",
+    "endpoint": "https://oss-cn-hangzhou-internal.aliyuncs.com",
+    "bucket": "cus-camos-dataworks-nonprod",
     "description": "OSS datasource auto-created via script"
 }

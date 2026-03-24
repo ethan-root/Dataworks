@@ -230,7 +230,7 @@ def load_merged_upstream_config(project_dir: str, env: str = "dev") -> dict:
     oss_cfg  = setting.get("datasource", {}).get("oss", {})
 
     # task 层覆写
-    for key in ("node_name", "cron", "reader_prefix"):
+    for key in ("node_name", "upstream_node_name", "cron", "reader_prefix"):
         if key in task_cfg:
             upstream_base[key] = task_cfg[key]
 
@@ -291,7 +291,7 @@ def load_merged_downstream_config(project_dir: str, env: str = "dev") -> dict:
     oss_cfg  = setting.get("datasource", {}).get("oss", {})
 
     # task 层覆写
-    for key in ("node_name", "cron"):
+    for key in ("node_name", "downstream_node_name", "upstream_node_name", "cron"):
         if key in task_cfg:
             base[key] = task_cfg[key]
 

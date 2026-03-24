@@ -1,7 +1,7 @@
 {
     "name": "mc_demo",
-    "project": "maxcompute_parquet_test",
-    "endpoint": "http://service.cn-shanghai.maxcompute.aliyun.com/api",
-    "subAccount": "kering-dataworks",
+    "project": "camos_nonprod",
+    "endpoint": "http://service.cn-hangzhou.maxcompute.aliyun-inc.com/api",
+    "subAccount": "sa-dataworks-api-job-nonprod@5743016457296183.onaliyun.com",
     "description": "MaxCompute datasource auto-created via script"
 }
