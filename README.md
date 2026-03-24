@@ -289,10 +289,6 @@ python scripts/ci_runner.py --feature-list my-new-feature --env dev
 |---|---|---|---|
 | `ALIYUN_ACCESS_KEY_ID` | `（隐藏）` | 阿里云账号 AccessKey ID | ⚠️ 必改 |
 | `ALIYUN_ACCESS_KEY_SECRET` | `（隐藏）` | 阿里云账号 AccessKey Secret | ⚠️ 必改 |
-| `ALIYUN_REGION` | `cn-shanghai` | DataWorks 所在 Region | ⚠️ 若地域不同则改 |
-| `DATAWORKS_PROJECT_ID` | `1184689` | DataWorks 工作空间纯数字 ID | ⚠️ 必改 |
-| `MAXCOMPUTE_PROJECT` | `maxcompute_parquet_test` | MaxCompute 项目名 | ⚠️ 必改 |
-| `MAXCOMPUTE_ENDPOINT` | `http://service.cn-shanghai.maxcompute.aliyun.com/api` | MaxCompute API Endpoint | ⚠️ 若地域不同则改 |
 
 ---
 
@@ -306,6 +302,7 @@ python scripts/ci_runner.py --feature-list my-new-feature --env dev
 
 | 字段 | 当前值 | 说明 | 动作 |
 |---|---|---|---|
+| `region` | `cn-shanghai` | DataWorks 工作空间所在地域 | ⚠️ 必改 |
 | `owner` | `202997971985675034` | 节点负责人 UID（阿里云账号纯数字 ID） | ⚠️ 必改 |
 | `resource_group` | `Serverless_res_group_771480527024737_...` | 独享数据集成资源组标识符 | ⚠️ 必改 |
 | `resourceGroupId` | `1000015000128` | 资源组纯数字 ID | ⚠️ 必改 |
