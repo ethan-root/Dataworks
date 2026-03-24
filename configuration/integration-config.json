@@ -2,7 +2,7 @@
     "node_name": "update_task_1",
     "owner": "5743016457296183",
     "resource_group": "Serverless_res_group_666685338003137_771961687655072",
-    "resourceGroupId": "1000015000128",
+    "resourceGroupId": "771961687655072",
     "resourceGroupName": "dataworks_default_resource_group",
     "cu": 0.5,
     "script_cu": "0.25",

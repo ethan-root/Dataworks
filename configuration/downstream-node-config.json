@@ -3,7 +3,7 @@
     "_comment_owner": "DataWorks 节点负责人 ID，修改时需使用 DataWorks 控制台中的用户 UID。",
     "owner": "5743016457296183",
     "resource_group": "Serverless_res_group_666685338003137_771961687655072",
-    "resourceGroupId": "1000015000128",
+    "resourceGroupId": "771961687655072",
     "resourceGroupName": "dataworks_default_resource_group",
     "_comment_script": "PYTHON 节点的运行时参数，commandTypeId=1322 对应 DataWorks Python3 节点类型。",
     "language": "python3",
