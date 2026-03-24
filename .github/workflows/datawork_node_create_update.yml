@@ -29,6 +29,17 @@ on:
         description: '逗号分隔的 feature 列表，或者输入 "all" 来部署全部 features'
         required: true
         default: 'all'
+      target_env:
+        description: '目标环境 (all, dev, qa, preprod, prod)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - dev
+          - qa
+          - preprod
+          - prod
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
@@ -62,13 +73,23 @@ jobs:
               CHANGED_FEATURES=$(echo "${{ github.event.inputs.features }}" | tr ',' '\n' | sed 's/^[ \t]*//;s/[ \t]*$//' | grep -v '^$' | grep -v '^shared$')
             fi
             
-            # 手动触发：认为所有指定的 feature 对所有环境都需要执行
             FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
-            echo "feature_list_dev=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
-            echo "feature_list_qa=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
-            echo "feature_list_preprod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
-            echo "feature_list_prod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
-            echo "手动调度：所有环境准备部署以下 features: ${FEATURE_LIST}"
+            TARGET_ENV="${{ github.event.inputs.target_env }}"
+            
+            if [ "$TARGET_ENV" = "all" ] || [ "$TARGET_ENV" = "dev" ]; then
+              echo "feature_list_dev=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$TARGET_ENV" = "all" ] || [ "$TARGET_ENV" = "qa" ]; then
+              echo "feature_list_qa=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$TARGET_ENV" = "all" ] || [ "$TARGET_ENV" = "preprod" ]; then
+              echo "feature_list_preprod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$TARGET_ENV" = "all" ] || [ "$TARGET_ENV" = "prod" ]; then
+              echo "feature_list_prod=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
+            fi
+            
+            echo "手动调度：目标环境 [$TARGET_ENV], 准备部署 features: ${FEATURE_LIST}"
           else
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.sha }}"
