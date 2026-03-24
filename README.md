@@ -278,4 +278,164 @@ python scripts/ci_runner.py --feature-list my-new-feature --env dev
 #### `validate_row_count.py` — 行数对比验证（部署卡点测试工具）
 - 利用 `pyodps` 双重并发比对 OSS 外表映射层与实际落库层的行数。不一致时拦截部署管道防止脏数据混入。
 
+---
 
+## 🔄 阿里云环境切换对照表
+
+将项目迁移到新阿里云账号/工作空间时，按以下三层逐一替换。凡标记 `⚠️ 必改` 的字段均需更新为客户环境的真实值。
+
+### 第一层：GitHub Actions Secrets
+
+> 仓库 → Settings → Secrets and variables → Actions
+
+| Secret 名称 | 当前示例值 | 说明 | 动作 |
+|---|---|---|---|
+| `ALIYUN_ACCESS_KEY_ID` | `（隐藏）` | 阿里云账号 AccessKey ID | ⚠️ 必改 |
+| `ALIYUN_ACCESS_KEY_SECRET` | `（隐藏）` | 阿里云账号 AccessKey Secret | ⚠️ 必改 |
+| `ALIYUN_REGION` | `cn-shanghai` | DataWorks 所在 Region | ⚠️ 若地域不同则改 |
+| `DATAWORKS_PROJECT_ID` | `1184689` | DataWorks 工作空间纯数字 ID | ⚠️ 必改 |
+| `MAXCOMPUTE_PROJECT` | `maxcompute_parquet_test` | MaxCompute 项目名 | ⚠️ 必改 |
+| `MAXCOMPUTE_ENDPOINT` | `http://service.cn-shanghai.maxcompute.aliyun.com/api` | MaxCompute API Endpoint | ⚠️ 若地域不同则改 |
+
+---
+
+### 第二层：`configuration/` 全局底板配置
+
+> 这些文件是系统级底板，切换账号时必须全部更新。
+
+#### `integration-config.json` / `upstream-node-config.json` / `downstream-node-config.json`
+
+以下字段三个文件中均存在，需同步修改：
+
+| 字段 | 当前值 | 说明 | 动作 |
+|---|---|---|---|
+| `owner` | `202997971985675034` | 节点负责人 UID（阿里云账号纯数字 ID） | ⚠️ 必改 |
+| `resource_group` | `Serverless_res_group_771480527024737_...` | 独享数据集成资源组标识符 | ⚠️ 必改 |
+| `resourceGroupId` | `1000015000128` | 资源组纯数字 ID | ⚠️ 必改 |
+| `resourceGroupName` | `dataworks_default_resource_group` | 资源组显示名称 | ⚠️ 按需改 |
+
+`integration-config.json` 中还有以下 `metadata` 字段需额外修改：
+
+| 字段 | 当前值 | 说明 | 动作 |
+|---|---|---|---|
+| `metadata.project.projectIdentifier` | `kering_batch_data_dataworks` | DataWorks 工作空间英文标识符 | ⚠️ 必改 |
+| `metadata.project.projectName` | `kering_batch_data_dataworks_workspace` | 工作空间显示名称 | ⚠️ 必改 |
+| `metadata.project.projectId` | `1184689` | 工作空间纯数字 ID | ⚠️ 必改 |
+| `metadata.tenantId` | `771480527024737` | 阿里云账号租户 ID | ⚠️ 必改 |
+
+#### `oss-datasource.json`
+
+| 字段 | 当前值 | 说明 | 动作 |
+|---|---|---|---|
+| `endpoint` | `https://oss-cn-shanghai-internal.aliyuncs.com` | OSS 内网 Endpoint（VPC 内网） | ⚠️ 按 Region 改 |
+
+#### `maxcompute-datasource.json`
+
+| 字段 | 当前值 | 说明 | 动作 |
+|---|---|---|---|
+| `project` | `maxcompute_parquet_test` | MaxCompute 项目名 | ⚠️ 必改 |
+| `endpoint` | `http://service.cn-shanghai.maxcompute.aliyun.com/api` | MaxCompute API Endpoint | ⚠️ 按 Region 改 |
+| `subAccount` | `kering-dataworks` | DataWorks 对应的 RAM 子账号登录名 | ⚠️ 必改 |
+
+---
+
+### 第三层：`features/<feature>/setting-<env>.json` 业务配置
+
+> **每个 Feature、每个环境** 单独维护一份，需逐一修改。
+
+| 字段路径 | 当前示例值 | 说明 | 动作 |
+|---|---|---|---|
+| `datasource.oss.name` | `oss_demo_final_03` | DataWorks 中 OSS 数据源连接名 | ⚠️ 按命名规范改 |
+| `datasource.oss.bucket` | `parquet-test1` | OSS Bucket 名称 | ⚠️ 必改 |
+| `datasource.oss.endpoint` | `https://oss-cn-shanghai-internal.aliyuncs.com` | OSS Endpoint | ⚠️ 按 Region 改 |
+| `datasource.mc.name` | `mc_demo_final_03` | DataWorks 中 MC 数据源连接名 | ⚠️ 按命名规范改 |
+| `datasource.mc.project` | `maxcompute_parquet_test` | MaxCompute 项目名 | ⚠️ 必改 |
+| `datasource.mc.endpoint` | `http://service.cn-shanghai.maxcompute.aliyun.com/api` | MaxCompute Endpoint | ⚠️ 按 Region 改 |
+| `task.node_name` | `update_task_final_03` | DataWorks 节点名称 | ⚠️ 按业务命名 |
+| `task.reader_prefix` | `camos/test_feature/` | OSS 路径前缀（上游节点扫描起点） | ⚠️ 必改 |
+| `task.writer_table` | `feature_demo_final_03` | MaxCompute 目标表名 | ⚠️ 必改 |
+| `task.mc_partition_retention` | `30` | 历史分区保留天数 | 按需改 |
+
+---
+
+### 附：Region Endpoint 速查表
+
+| Region | `ALIYUN_REGION` | OSS 内网 Endpoint | MaxCompute Endpoint |
+|---|---|---|---|
+| 华东2（上海） | `cn-shanghai` | `https://oss-cn-shanghai-internal.aliyuncs.com` | `http://service.cn-shanghai.maxcompute.aliyun.com/api` |
+| 华北2（北京） | `cn-beijing` | `https://oss-cn-beijing-internal.aliyuncs.com` | `http://service.cn-beijing.maxcompute.aliyun.com/api` |
+| 华南1（深圳） | `cn-shenzhen` | `https://oss-cn-shenzhen-internal.aliyuncs.com` | `http://service.cn-shenzhen.maxcompute.aliyun.com/api` |
+| 华东1（杭州） | `cn-hangzhou` | `https://oss-cn-hangzhou-internal.aliyuncs.com` | `http://service.cn-hangzhou.maxcompute.aliyun.com/api` |
+
+### 附：关键 ID 获取方式
+
+| 需要的值 | 在哪里找 |
+|---|---|
+| `owner` / 账号纯数字 UID | 阿里云控制台右上角 → 安全设置 → **账号 ID** |
+| `tenantId` | DataWorks 控制台工作空间列表页面 URL 中的 `tenantId` 参数 |
+| `DATAWORKS_PROJECT_ID` | DataWorks 控制台 → 工作空间列表 → 工作空间名称下方的纯数字 |
+| `resource_group` / `resourceGroupId` | DataWorks 控制台 → 资源组管理 → 对应资源组详情页 |
+| `subAccount` | RAM 控制台 → 用户 → 对应子账号的**登录名** |
+
+---
+
+## 🏗️ 客户环境前置准备
+
+在向客户环境执行第一次部署前，必须确保以下基础条件已就绪。建议按阶段顺序完成。
+
+### 阶段 1 · 阿里云账号与 IAM 权限
+
+| 需要准备 | 说明 |
+|---|---|
+| **RAM 子账号 + AccessKey** | 为 CI/CD 流水线专门创建一个 RAM 子账号，生成 AK/SK 并填入 GitHub Secrets |
+| **获取账号纯数字 UID** | 阿里云控制台右上角 → 安全设置 → 账号 ID，填入配置文件 `owner` 字段 |
+| **授予三条权限策略** | `AliyunDataWorksFullAccess` + `AliyunOSSFullAccess` + `AliyunODPSFullAccess` |
+
+### 阶段 2 · OSS（对象存储）
+
+| 需要准备 | 说明 |
+|---|---|
+| **创建 Bucket** | 脚本不会自动建 Bucket，必须提前手动创建，且与 DataWorks 工作空间**同 Region** |
+| **上传测试 Parquet 文件** | 在 `reader_prefix` 路径下至少放一个 `.parquet` 文件，否则上游节点运行时找不到文件会报错退出 |
+| **记录 Bucket 名称 + 内网 Endpoint** | 填入 `features/*/setting-<env>.json` 的 `datasource.oss` 段 |
+
+### 阶段 3 · MaxCompute（数据仓库）
+
+| 需要准备 | 说明 |
+|---|---|
+| **创建 MaxCompute Project** | 脚本不会自动建项目，必须提前手动创建 |
+| **为 RAM 子账号授权 Project 成员** | MC 控制台 → Project → 成员管理 → 添加成员，赋予 `Admin` 或 `Developer` 角色 |
+| **记录 Project 名称 + API Endpoint** | 填入 `MAXCOMPUTE_PROJECT` / `MAXCOMPUTE_ENDPOINT` Secrets 及底板配置文件 |
+
+### 阶段 4 · DataWorks 工作空间
+
+| 需要准备 | 说明 |
+|---|---|
+| **创建工作空间**（专业版或以上） | 基础版部分 OpenAPI 不支持，流水线会报错 |
+| **购买并绑定独享数据集成资源组** | 资源组 ID / 标识符填入所有底板 JSON 的 `resource_group` / `resourceGroupId` 字段 |
+| **为 RAM 子账号添加工作空间成员** | DataWorks 控制台 → 工作空间 → 成员管理 → 添加，赋予「开发」或「管理员」角色 |
+| **记录工作空间数字 ID 与英文标识符** | 填入 `DATAWORKS_PROJECT_ID` Secret 和 `integration-config.json` 的 `metadata` 段 |
+
+### 阶段 5 · GitHub 仓库
+
+| 需要准备 | 说明 |
+|---|---|
+| **配置 6 个 Repository Secrets** | 见上方「🔑 环境变量」章节，全部填入客户真实值 |
+| **配置 GitHub Environments** | Settings → Environments → 创建 `dev` / `qa` / `preprod` / `prod`，`prod` 需配置人工审批 Reviewers |
+
+### 阶段 6 · 项目代码配置
+
+| 需要准备 | 说明 |
+|---|---|
+| **修改 `configuration/` 底板** | 4 个 JSON 文件中的 `owner`、`resource_group`、`resourceGroupId`、`metadata.*` 字段全部替换 |
+| **修改 `features/*/setting-<env>.json`** | 所有 feature 的每个环境配置文件：数据源名、bucket、endpoint、目标表名 |
+
+### 准备完成后的执行顺序
+
+```
+① 账号 & 权限   → ② OSS Bucket & 测试数据
+→ ③ MaxCompute Project   → ④ DataWorks 工作空间 & 资源组
+→ ⑤ GitHub Secrets & Environments
+→ ⑥ 修改项目代码配置
+→ ⑦ Push 到 main / 手动触发 workflow_dispatch 🚀
+```
