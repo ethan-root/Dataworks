@@ -1,4 +1,4 @@
-# DataWorks DataOps — OSS to MaxCompute
+﻿# DataWorks DataOps — OSS to MaxCompute
 
 基于 **GitHub Actions + Python** 自动化编排 Aliyun DataWorks 数据集成任务，实现配置驱动、多环境串行部署与代码化管理的 DataOps CI/CD 体系。
 
@@ -17,9 +17,7 @@ Dataworks/
 ├── configuration/                   # 全局底板配置（系统级参数，无需业务人员修改）
 │   ├── integration-config.json      # 数据集成节点系统级底板
 │   ├── oss-datasource.json          # OSS 数据源系统级底板
-│   ├── maxcompute-datasource.json   # MaxCompute 数据源系统级底板
-│   ├── get_earliest_file_name.py    # 上游节点底层参考源码
-│   └── move_parquet_to_completed.py # 下游归档底层参考源码
+│   └── maxcompute-datasource.json   # MaxCompute 数据源系统级底板
 │
 ├── features/                        # 业务工作区（开发人员每次只改这里）
 │   ├── shared/
@@ -37,11 +35,14 @@ Dataworks/
     ├── ci_runner.py                 # ★ 编排层：发起上下游全链路部署流程的总指挥
     ├── config_merger.py             # 配置引擎（底板 + 业务参数 + DDL 聚合解析 → 完整配置）
     ├── dataworks_client.py          # DataWorks SDK 封装（内置 Throttling 指数退避重试保护）
-    ├── check/create_*_ds.py         # 数据源探查与创建工具
+    ├── check_oss_ds.py / check_mc_ds.py   # 数据源探活工具
+    ├── create_oss_ds.py / create_mc_ds.py # 数据源创建工具
     ├── create_table.py              # MaxCompute 增量 DDL 迁移执行器（基于 Changelog）
-    ├── create_upstream_node.py      # 上游 Python 节点生成器（拉取处理）
+    ├── create_upstream_node.py      # 上游赋值节点生成器（CONTROLLER_ASSIGNMENT，获取最早文件名）
     ├── create_integration_node.py   # 核心 DI 数据集成节点生成/对比器
     ├── create_downstream_node.py    # 下游归档移动节点生成器
+    ├── get_earliest_file_name.py    # 上游节点运行时脚本（OSS 最早 Parquet 文件探测）
+    ├── move_parquet_to_completed.py # 下游节点运行时脚本（归档 OSS 文件至 completed/）
     └── publish_node.py              # 三阶段打样与真实环境发布工具
 ```
 
@@ -84,10 +85,12 @@ Dataworks/
 
 ### 第一步：配置 GitHub 密钥 (Secrets)
 项目必须拥有操作你阿里云 DataWorks 的权限。请进入你这个 GitHub 仓库的 `Settings -> Secrets and variables -> Actions`，添加以下机密参数：
-- `ALIBABA_CLOUD_ACCESS_KEY_ID`: 你的阿里云 AccessKey ID
-- `ALIBABA_CLOUD_ACCESS_KEY_SECRET`: 你的阿里云 AccessKey Secret
+- `ALIYUN_ACCESS_KEY_ID`: 你的阿里云 AccessKey ID
+- `ALIYUN_ACCESS_KEY_SECRET`: 你的阿里云 AccessKey Secret
 - `ALIYUN_REGION`: 你的 DataWorks 所在地域 (如 `cn-shanghai`)
 - `DATAWORKS_PROJECT_ID`: 你 DataWorks 真实工作空间的纯数字 ID
+- `MAXCOMPUTE_PROJECT`: 你的 MaxCompute 项目名
+- `MAXCOMPUTE_ENDPOINT`: MaxCompute API Endpoint（如 `http://service.cn-shanghai.maxcompute.aliyun.com/api`）
 
 ### 第二步：修改项目的全局“底板”参数
 换了新账号或新项目，必须先修改底层网关参数。
@@ -180,10 +183,10 @@ PARTITIONED BY (pt STRING);
 
 ### 1. 配置超级合并映射（`config_merger.py`）
 每次部署时按顺序深度混淆参数：
-1. **获取底板**：从 `configuration/` 拾取无生命的原型 JSON 或 python 源码。
+1. **获取底板**：从 `configuration/` 拾取 JSON 配置模板（`integration-config.json` / `oss-datasource.json` / `maxcompute-datasource.json` 等）。
 2. **叠加环境字典**：把 `setting-<env>.json` 中的定制参数暴力注入原型的血肉中。
 3. **DDL 增量词法透视 (`_parse_all_columns_from_sqls`)**：脚本会自动按时间戳遍历这个环境自古至今所有跑过的 DDL 文件，利用正则提取所有的 `CREATE` 和 `ALTER ADD COLUMNS` 列记录，智能像滚雪球一般拼装出当前时刻这张表完整的“表结构画像”，然后自动转化填装至集成节点的数组映射关系里！无须人为维护繁琐 Mapping！
-4. **节点变量透传编织**：自动扫描上游节点（如拉取最新 Parquet 文件的 Python 节点）产生的临时变量输出，自动捕获并在下层核心的数据集成甚至下游归档组件中，用 `${变量名}` 做全链路的无缝参数传递与串联。
+4. **节点变量透传**：在集成节点的 `reader.path` 和下游节点参数中预设 `$\{outputs\}` 占位符，DataWorks 运行时由上游赋值节点（CONTROLLER_ASSIGNMENT）将实际 Parquet 文件路径注入，实现跨节点的文件名全链路传递。
 
 ### 2. DataWorks API 万能外壳（`dataworks_client.py`）
 该文件不单单是 SDK 调用器，更是包含了极具韧性的防御设施：
