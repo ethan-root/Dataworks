@@ -1,7 +1,7 @@
 {
     "_comment": "上游赋值节点（CONTROLLER_ASSIGNMENT）稳定配置，极少修改，跨环境共享。",
     "_comment_owner": "DataWorks 节点负责人 ID，修改时需使用 DataWorks 控制台中的用户 UID。",
-    "owner": "5743016457296183",
+    "owner": "210690073655631050",
     "resource_group": "Serverless_res_group_666685338003137_771961687655072",
     "resourceGroupId": "771961687655072",
     "resourceGroupName": "dataworks_default_resource_group",
