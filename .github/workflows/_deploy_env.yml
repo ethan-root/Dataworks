@@ -58,7 +58,7 @@ jobs:
           REGION=$(jq -r '.region' configuration/integration-config.json)
           DW_PROJECT_ID=$(jq -r '.metadata.project.projectId' configuration/integration-config.json)
           MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json | sed 's/-inc//')
           echo "ALIYUN_REGION=${REGION}"             >> $GITHUB_ENV
           echo "DATAWORKS_PROJECT_ID=${DW_PROJECT_ID}" >> $GITHUB_ENV
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"    >> $GITHUB_ENV
