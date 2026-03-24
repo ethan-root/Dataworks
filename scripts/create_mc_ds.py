@@ -68,35 +68,37 @@ def main():
     # 或者如果不传，后端可能会默认取。我们先明确传入 "PrimaryAccount" 试试看。
     connection_properties["authType"] = "PrimaryAccount"
 
-    print(f"Creating MaxCompute DataSource '{config['name']}' in Project {project_id}...")
-    print(f"  Request connection_properties: {json.dumps(connection_properties, ensure_ascii=False)}")
-
     client = create_client()
-    request = dw_models.CreateDataSourceRequest(
-        project_id=project_id,
-        name=config["name"],
-        type="odps",  # API 规定 MaxCompute 是 odps
-        connection_properties_mode="UrlMode", # 回退到 UrlMode，InstanceMode 之前报错不支持 odps
-        connection_properties=json.dumps(connection_properties, ensure_ascii=False),
-        description=config.get("description", "")
-    )
+    
+    for env_type in ["Dev", "Prod"]:
+        connection_properties["envType"] = env_type
+        print(f"Creating MaxCompute DataSource '{config['name']}' in Project {project_id} (Env: {env_type})...")
+        
+        request = dw_models.CreateDataSourceRequest(
+            project_id=project_id,
+            name=config["name"],
+            type="odps",  # API 规定 MaxCompute 是 odps
+            connection_properties_mode="UrlMode", # 回退到 UrlMode，InstanceMode 之前报错不支持 odps
+            connection_properties=json.dumps(connection_properties, ensure_ascii=False),
+            description=config.get("description", "")
+        )
 
-    try:
-        resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
-        print(f"✅ MaxCompute DataSource Created successfully. ID: {resp.body.id}")
-    except Exception as e:
-        msg = e.message if hasattr(e, 'message') else str(e)
-        if (
-            "already" in msg.lower()
-            or "exist" in msg.lower()
-            or "已存在" in msg
-            or "重复" in msg
-            or "名称重复" in msg
-        ):
-            print(f"ℹ️ MaxCompute DataSource may already exist: {msg}")
-            return
-        print(f"❌ Failed to create DataSource: {msg}")
-        sys.exit(1)
+        try:
+            resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
+            print(f"✅ MaxCompute DataSource Created successfully in {env_type}. ID: {resp.body.id}")
+        except Exception as e:
+            msg = e.message if hasattr(e, 'message') else str(e)
+            if (
+                "already" in msg.lower()
+                or "exist" in msg.lower()
+                or "已存在" in msg
+                or "重复" in msg
+                or "名称重复" in msg
+            ):
+                print(f"ℹ️ MaxCompute DataSource may already exist in {env_type}: {msg}")
+            else:
+                print(f"❌ Failed to create DataSource in {env_type}: {msg}")
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()

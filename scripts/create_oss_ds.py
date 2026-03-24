@@ -67,36 +67,39 @@ def main():
         sys.exit(1)
     project_id = int(project_id_str)
 
-    print(f"Creating OSS DataSource '{config['name']}' in Project {project_id}...")
-    
     client = create_client()
-    # 构造请求体
-    request = dw_models.CreateDataSourceRequest(
-        project_id=project_id,
-        name=config.get("name"),
-        type="oss",
-        description=config.get("description", ""),
-        connection_properties_mode="UrlMode",
-        connection_properties=json.dumps(connection_properties, ensure_ascii=False)
-    )
     
-    try:
-        resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
-        print(f"✅ OSS DataSource Created successfully. ID: {resp.body.id}")
-    except Exception as e:
-        msg = e.message if hasattr(e, 'message') else str(e)
-        # 与 "先检查后创建" 配合，若并发/接口漏检导致已存在则视为成功
-        if (
-            "already" in msg.lower()
-            or "exist" in msg.lower()
-            or "已存在" in msg
-            or "重复" in msg
-            or "名称重复" in msg
-        ):
-            print(f"ℹ️ OSS DataSource may already exist: {msg}")
-            return
-        print(f"❌ Failed to create DataSource: {msg}")
-        sys.exit(1)
+    for env_type in ["Dev", "Prod"]:
+        connection_properties["envType"] = env_type
+        print(f"Creating OSS DataSource '{config['name']}' in Project {project_id} (Env: {env_type})...")
+        
+        # 构造请求体
+        request = dw_models.CreateDataSourceRequest(
+            project_id=project_id,
+            name=config.get("name"),
+            type="oss",
+            description=config.get("description", ""),
+            connection_properties_mode="UrlMode",
+            connection_properties=json.dumps(connection_properties, ensure_ascii=False)
+        )
+        
+        try:
+            resp = client.create_data_source_with_options(request, util_models.RuntimeOptions())
+            print(f"✅ OSS DataSource Created successfully in {env_type}. ID: {resp.body.id}")
+        except Exception as e:
+            msg = e.message if hasattr(e, 'message') else str(e)
+            # 与 "先检查后创建" 配合，若并发/接口漏检导致已存在则视为成功
+            if (
+                "already" in msg.lower()
+                or "exist" in msg.lower()
+                or "已存在" in msg
+                or "重复" in msg
+                or "名称重复" in msg
+            ):
+                print(f"ℹ️ OSS DataSource may already exist in {env_type}: {msg}")
+            else:
+                print(f"❌ Failed to create DataSource in {env_type}: {msg}")
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()
