@@ -1,59 +1,59 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# datawork_node_create_update.yml  ·  DataWorks Node 创建/更新 主流水线
+﻿# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# datawork_node_create_update.yml  路  DataWorks Node 鍒涘缓/鏇存柊 涓绘祦姘寸嚎
 #
-# 触发条件：main 分支有 features/** 目录下的文件变动时自动触发
+# 瑙﹀彂鏉′欢锛歮ain 鍒嗘敮鏈?features/** 鐩綍涓嬬殑鏂囦欢鍙樺姩鏃惰嚜鍔ㄨЕ鍙?
 #
-# 执行流程：
-#   1. detect    — 扫描 git diff，识别本次推送涉及哪些 feature 文件夹发生了变化
-#   2. deploy-dev     — 部署到 DEV 环境
-#   3. deploy-qa      — 部署到 QA 环境（needs: deploy-dev）
-#   4. deploy-preprod — 部署到 PRE-PROD 环境（needs: deploy-qa）
-#   5. deploy-prod    — 部署到 PROD 环境（needs: deploy-preprod，需要人工审批）
+# 鎵ц娴佺▼锛?
+#   1. detect    鈥?鎵弿 git diff锛岃瘑鍒湰娆℃帹閫佹秹鍙婂摢浜?feature 鏂囦欢澶瑰彂鐢熶簡鍙樺寲
+#   2. deploy-dev     鈥?閮ㄧ讲鍒?DEV 鐜
+#   3. deploy-qa      鈥?閮ㄧ讲鍒?QA 鐜锛坣eeds: deploy-dev锛?
+#   4. deploy-preprod 鈥?閮ㄧ讲鍒?PRE-PROD 鐜锛坣eeds: deploy-qa锛?
+#   5. deploy-prod    鈥?閮ㄧ讲鍒?PROD 鐜锛坣eeds: deploy-preprod锛岄渶瑕佷汉宸ュ鎵癸級
 #
-# 每个 deploy-* 阶段的具体执行逻辑均委托给可复用工作流：
+# 姣忎釜 deploy-* 闃舵鐨勫叿浣撴墽琛岄€昏緫鍧囧鎵樼粰鍙鐢ㄥ伐浣滄祦锛?
 #   .github/workflows/_deploy_env.yml
-# ─────────────────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 name: datawork_node_create_update
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# ── 触发条件 ──────────────────────────────────────────────────────────────────
+# 鈹€鈹€ 瑙﹀彂鏉′欢 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 on:
   push:
     branches:
       - main
     paths:
-      - "features/**"   # 仅当 features/ 目录内容发生变化时才触发
+      - "features/**"   # 浠呭綋 features/ 鐩綍鍐呭鍙戠敓鍙樺寲鏃舵墠瑙﹀彂
   workflow_dispatch:
     inputs:
       features:
-        description: '逗号分隔的 feature 列表，或者输入 "all" 来部署全部 features'
+        description: '閫楀彿鍒嗛殧鐨?feature 鍒楄〃锛屾垨鑰呰緭鍏?"all" 鏉ラ儴缃插叏閮?features'
         required: true
         default: 'all'
 
-# ── 全局 secrets（由各 deploy Job 通过 secrets: inherit 向下传递）──────────────
-# secrets 由 GitHub Repository → Settings → Secrets and variables 配置
-# 实际注入在 _deploy_env.yml 中通过 secrets: 字段完成
-# 此处无需声明全局 env，避免在 detect Job 中暴露敏感信息
+# 鈹€鈹€ 鍏ㄥ眬 secrets锛堢敱鍚?deploy Job 閫氳繃 secrets: inherit 鍚戜笅浼犻€掞級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# secrets 鐢?GitHub Repository 鈫?Settings 鈫?Secrets and variables 閰嶇疆
+# 瀹為檯娉ㄥ叆鍦?_deploy_env.yml 涓€氳繃 secrets: 瀛楁瀹屾垚
+# 姝ゅ鏃犻渶澹版槑鍏ㄥ眬 env锛岄伩鍏嶅湪 detect Job 涓毚闇叉晱鎰熶俊鎭?
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────
-  # Job 0 · 检测变更 feature 列表
-  # 通过 git diff 扫描本次 push 涉及的 features/<name>/ 子目录
-  # ─────────────────────────────────────────────────────────────────────────
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # Job 0 路 妫€娴嬪彉鏇?feature 鍒楄〃
+  # 閫氳繃 git diff 鎵弿鏈 push 娑夊強鐨?features/<name>/ 瀛愮洰褰?
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   detect:
-    name: "🔍 Detect Changed Features"
+    name: "馃攳 Detect Changed Features"
     runs-on: ubuntu-latest
     outputs:
       feature_list: ${{ steps.resolve.outputs.feature_list }}
     steps:
-      - name: "⬇️  Checkout (full history)"
+      - name: "猬囷笍  Checkout (full history)"
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # 拉取完整历史，保证 git diff 能正确比对 BEFORE..AFTER
+          fetch-depth: 0    # 鎷夊彇瀹屾暣鍘嗗彶锛屼繚璇?git diff 鑳芥纭瘮瀵?BEFORE..AFTER
 
-      - name: "📋 Resolve changed features"
+      - name: "馃搵 Resolve changed features"
         id: resolve
         shell: bash
         run: |
@@ -69,13 +69,13 @@ jobs:
             BEFORE="${{ github.event.before }}"
             AFTER="${{ github.sha }}"
 
-            # 处理首次推送（BEFORE 为全零 SHA）的边界情况
+            # 澶勭悊棣栨鎺ㄩ€侊紙BEFORE 涓哄叏闆?SHA锛夌殑杈圭晫鎯呭喌
             if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
               BEFORE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
             fi
 
-            # 2. 获取发生变更的集成节点名称
-            # 提取 features/<name>/... 中的 <name> 层作为 feature 标识
+            # 2. 鑾峰彇鍙戠敓鍙樻洿鐨勯泦鎴愯妭鐐瑰悕绉?
+            # 鎻愬彇 features/<name>/... 涓殑 <name> 灞備綔涓?feature 鏍囪瘑
             CHANGED_FEATURES="$(
               git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null \
                 | sed -n 's#^features/\([^/]*\)/.*#\1#p' \
@@ -84,20 +84,20 @@ jobs:
           fi
 
           if [ -z "$CHANGED_FEATURES" ]; then
-            echo "⚠️  未检测到任何待部署的 feature，跳过后续所有 deploy Job。"
+            echo "鈿狅笍  鏈娴嬪埌浠讳綍寰呴儴缃茬殑 feature锛岃烦杩囧悗缁墍鏈?deploy Job銆?
             echo "feature_list=" >> "$GITHUB_OUTPUT"
           else
-            echo "📋 待部署的 feature(s):"
+            echo "馃搵 寰呴儴缃茬殑 feature(s):"
             echo "$CHANGED_FEATURES"
             FEATURE_LIST="$(echo "$CHANGED_FEATURES" | tr '\n' ',' | sed 's/,$//')"
             echo "feature_list=${FEATURE_LIST}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # Job 1 · 部署到 DEV 环境
-  # ─────────────────────────────────────────────────────────────────────────
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # Job 1 路 閮ㄧ讲鍒?DEV 鐜
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   deploy-dev:
-    name: "🟢 Deploy → DEV"
+    name: "馃煝 Deploy 鈫?DEV"
     needs: detect
     if: needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
@@ -105,18 +105,14 @@ jobs:
       env_name: "dev"
       feature_list: ${{ needs.detect.outputs.feature_list }}
     secrets:
-      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
-      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
-      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # Job 2 · 部署到 QA 环境（DEV 成功后自动触发）
-  # ─────────────────────────────────────────────────────────────────────────
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # Job 2 路 閮ㄧ讲鍒?QA 鐜锛圖EV 鎴愬姛鍚庤嚜鍔ㄨЕ鍙戯級
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   deploy-qa:
-    name: "🟡 Deploy → QA"
+    name: "馃煛 Deploy 鈫?QA"
     needs: [detect, deploy-dev]
     if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
@@ -124,18 +120,14 @@ jobs:
       env_name: "qa"
       feature_list: ${{ needs.detect.outputs.feature_list }}
     secrets:
-      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
-      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
-      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # Job 3 · 部署到 PRE-PROD 环境（QA 成功后自动触发）
-  # ─────────────────────────────────────────────────────────────────────────
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # Job 3 路 閮ㄧ讲鍒?PRE-PROD 鐜锛圦A 鎴愬姛鍚庤嚜鍔ㄨЕ鍙戯級
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   deploy-preprod:
-    name: "🟠 Deploy → PRE-PROD"
+    name: "馃煚 Deploy 鈫?PRE-PROD"
     needs: [detect, deploy-qa]
     if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
@@ -143,19 +135,15 @@ jobs:
       env_name: "preprod"
       feature_list: ${{ needs.detect.outputs.feature_list }}
     secrets:
-      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
-      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
-      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # Job 4 · 部署到 PROD 环境（需要 GitHub Environment 人工审批）
-  # 在 Settings → Environments → prod 中配置 Required Reviewers
-  # ─────────────────────────────────────────────────────────────────────────
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # Job 4 路 閮ㄧ讲鍒?PROD 鐜锛堥渶瑕?GitHub Environment 浜哄伐瀹℃壒锛?
+  # 鍦?Settings 鈫?Environments 鈫?prod 涓厤缃?Required Reviewers
+  # 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   deploy-prod:
-    name: "🔴 Deploy → PROD  🔒 (Requires Approval)"
+    name: "馃敶 Deploy 鈫?PROD  馃敀 (Requires Approval)"
     needs: [detect, deploy-preprod]
     if: false # needs.detect.outputs.feature_list != ''
     uses: ./.github/workflows/_deploy_env.yml
@@ -163,9 +151,6 @@ jobs:
       env_name: "prod"
       feature_list: ${{ needs.detect.outputs.feature_list }}
     secrets:
-      DATAWORKS_PROJECT_ID:     ${{ secrets.DATAWORKS_PROJECT_ID }}
       ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
       ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-      ALIYUN_REGION:            ${{ secrets.ALIYUN_REGION }}
-      MAXCOMPUTE_PROJECT:       ${{ secrets.MAXCOMPUTE_PROJECT }}
-      MAXCOMPUTE_ENDPOINT:      ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+
