@@ -97,6 +97,9 @@ def main():
                 or "名称重复" in msg
             ):
                 print(f"ℹ️ OSS DataSource may already exist in {env_type}: {msg}")
+            elif "not supported in this project" in msg or "not supported" in msg:
+                print(f"ℹ️ Workspace mode does not support {env_type} (likely Basic Mode). Skipping {env_type} creation.")
+                continue
             else:
                 print(f"❌ Failed to create DataSource in {env_type}: {msg}")
                 sys.exit(1)
