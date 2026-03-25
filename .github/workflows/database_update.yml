@@ -114,8 +114,8 @@ jobs:
       - name: "📋 Load env config from JSON files"
         shell: bash
         run: |
-          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_PROJECT=$(jq -r '.project' default-setting/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' default-setting/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
 
@@ -173,8 +173,8 @@ jobs:
       - name: "📋 Load env config from JSON files"
         shell: bash
         run: |
-          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_PROJECT=$(jq -r '.project' default-setting/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' default-setting/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
       - name: "🗂️  Normalize DDL directory"
@@ -216,8 +216,8 @@ jobs:
       - name: "📋 Load env config from JSON files"
         shell: bash
         run: |
-          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_PROJECT=$(jq -r '.project' default-setting/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' default-setting/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
       - name: "🗂️  Normalize DDL directory"
@@ -255,8 +255,8 @@ jobs:
       - name: "📋 Load env config from JSON files"
         shell: bash
         run: |
-          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_PROJECT=$(jq -r '.project' default-setting/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' default-setting/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
       - name: "🗂️  Normalize DDL directory"
@@ -294,8 +294,8 @@ jobs:
       - name: "📋 Load env config from JSON files"
         shell: bash
         run: |
-          MC_PROJECT=$(jq -r '.project' configuration/maxcompute-datasource.json)
-          MC_ENDPOINT=$(jq -r '.endpoint' configuration/maxcompute-datasource.json)
+          MC_PROJECT=$(jq -r '.project' default-setting/maxcompute-datasource.json)
+          MC_ENDPOINT=$(jq -r '.endpoint' default-setting/maxcompute-datasource.json)
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"   >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}" >> $GITHUB_ENV
       - name: "🗂️  Normalize DDL directory"
