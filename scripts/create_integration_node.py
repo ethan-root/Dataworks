@@ -51,6 +51,16 @@ def process_project(client, project_id: int, project_dir: str, env: str) -> None
                 }
             ]
         }
+        
+        # 必须同时将其加入脚本节点的 parameters 列表，否则 Data Integration UI 将无法感知参数注入
+        config.setdefault("parameters", []).append({
+            "artifactType": "Variable",
+            "name": "outputs",
+            "scope": "NodeParameter",
+            "type": "Constant",
+            "value": f"${{{upstream_node_name}.outputs}}"
+        })
+
 
     print(f"\n{'='*50}")
     print(f"Processing (Upsert): {node_name}  (dir: {project_dir})")
@@ -97,6 +107,14 @@ def create_project(client, project_id: int, project_dir: str, env: str) -> None:
                 }
             ]
         }
+
+        config.setdefault("parameters", []).append({
+            "artifactType": "Variable",
+            "name": "outputs",
+            "scope": "NodeParameter",
+            "type": "Constant",
+            "value": f"${{{upstream_node_name}.outputs}}"
+        })
     else:
         print(f"   [WARN] 未找到上游节点 '{upstream_node_name}'，已跳过数据依赖配置。")
 
