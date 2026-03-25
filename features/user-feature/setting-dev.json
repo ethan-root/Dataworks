@@ -1,28 +1,28 @@
 {
     "datasource": {
         "oss": {
-            "name": "test_oss_01",
+            "name": "test_oss_02",
             "bucket": "cus-camos-dataworks-nonprod",
             "endpoint": "https://oss-cn-hangzhou-internal.aliyuncs.com"
         },
         "mc": {
-            "name": "test_mc_01",
+            "name": "test_mc_02",
             "project": "camos_nonprod",
             "endpoint": "http://service.cn-hangzhou.maxcompute.aliyun-inc.com/api"
         }
     },
     "task": {
-        "node_name": "test_integration_01",
+        "node_name": "test_integration_02",
         "description": "final e2e regression test",
         "cron": "00 30 00-23/1 * * ?",
-        "reader_datasource": "test_oss_01",
+        "reader_datasource": "test_oss_02",
         "reader_path": "${outputs}",
-        "writer_datasource": "test_mc_01",
+        "writer_datasource": "test_mc_02",
         "writer_table": "user_feature",
         "writer_partition": "pt='${bizdate}'",
         "reader_prefix": "camos/test_feature/",
         "mc_partition_retention": 30,
-        "upstream_node_name": "test_updatestream_01",
-        "downstream_node_name": "test_downstream_01"
+        "upstream_node_name": "test_updatestream_02",
+        "downstream_node_name": "test_downstream_02"
     }
 }
