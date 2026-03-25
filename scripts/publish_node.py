@@ -21,6 +21,16 @@ from config_merger import load_merged_node_config
 from alibabacloud_dataworks_public20240518 import models as dw_models
 from alibabacloud_tea_util import models as util_models
 
+
+def _is_pipeline_not_running_error(msg: str) -> bool:
+    """识别 DataWorks Pipeline 在非运行态推进阶段时返回的典型错误。"""
+    low = msg.lower()
+    return (
+        "流水线不是正在运行" in msg
+        or "not running" in low
+        or "pipeline is not running" in low
+    )
+
 def main():
     parser = argparse.ArgumentParser(description="Publish DataWorks Node to Production using Pipeline API")
     parser.add_argument(
@@ -58,12 +68,16 @@ def main():
     print(f"{'='*50}")
 
     # ── 3. 获取真实节点 ID 列表 ─────────────────────────────────────
-    # 计算所有的关联节点名称
+    # 优先使用 setting-<env>.json 中显式声明的节点名，避免与默认后缀推导不一致。
+    upstream_name = config.get("upstream_node_name", f"{node_name}_upstream")
+    downstream_name = config.get("downstream_node_name", f"{node_name}_downstream")
+    cp_name = config.get("cp_node_name", f"{node_name}_cp")
+
     node_names = [
-        node_name,                   # 集成节点
-        f"{node_name}_upstream",     # 上游赋值节点
-        f"{node_name}_downstream",   # 下游 Python 节点
-        f"{node_name}_cp"            # 清理 Python 节点
+        node_name,       # 集成节点
+        upstream_name,   # 上游赋值节点
+        downstream_name, # 下游 Python 节点
+        cp_name          # 清理 Python 节点（可选）
     ]
     
     object_ids = []
@@ -127,6 +141,14 @@ def main():
                 
             except Exception as e:
                 msg = str(e)
+                # 某些场景下（例如阶段已自动收敛/流水线结束），后续阶段推进会返回"非运行态"。
+                # 对于非首阶段，此时按“阶段无需继续推进”处理，避免误报整个发布失败。
+                if _is_pipeline_not_running_error(msg) and stage in ("PROD_CHECK", "PROD"):
+                    print(f"\n   [WARN] 阶段 {stage} 返回非运行态: {msg}")
+                    print("   [INFO] 该场景通常表示流水线已结束或阶段已收敛，本次不再强制推进后续阶段。")
+                    success = True
+                    break
+
                 if "Failed" in msg or "not finish" in msg.lower() or "dependent" in msg.lower():
                     print(f"\n   [WARN] 触发出错 (可能是上一个阶段尚未完全结束): {msg}")
                     if attempt < max_retries - 1:

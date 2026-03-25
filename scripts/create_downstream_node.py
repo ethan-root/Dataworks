@@ -233,7 +233,7 @@ if __name__ == '__main__':
                             "type":         "Normal",
                             "output":       str(upstream_node_id),
                             "sourceType":   "Manual",
-                            "refTableName": f"{base_node_name}_upstream"
+                            "refTableName": upstream_assignment_node
                         },
                         {
                             "type":         "Normal",
