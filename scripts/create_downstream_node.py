@@ -139,19 +139,13 @@ if __name__ == '__main__':
     _endpoint = '{oss_endpoint}'
     _bucket   = '{oss_bucket}'
 
-    # AK/SK 由 CI/CD 在部署时注入到脚本内容
-    # TODO: 后续可迁移为 DataWorks RAM 角色认证，彻底消除密钥注入
-    _ak = '{ak}'
-    _sk = '{sk}'
-
-    # 文件路径由上游赋值节点通过 DataWorks 参数机制传入（sys.argv[1]）
-    _file_path = ''
-    if len(_sys.argv) > 1:
+    # AK/SK 及文件路径由 DataWorks 的节点参数透传传入
+    if len(_sys.argv) > 3:
         _file_path = _sys.argv[1].strip()
-
-    # 当未能从上游获取参数时主动退出，避免抛出底层执行异常
-    if not _file_path:
-        print('ERROR: 未接收到来自上游赋值节点的文件路径，停止执行！', file=_sys.stderr)
+        _ak = _sys.argv[2].strip()
+        _sk = _sys.argv[3].strip()
+    else:
+        print('ERROR: 参数不完整，期望传入 [文件路径] [AK] [SK]，停止执行！', file=_sys.stderr)
         _sys.exit(1)
 
     print(f'接收到文件路径: {{_file_path}}')
@@ -193,7 +187,8 @@ if __name__ == '__main__':
                                 "name":         "-",   # 使用 DataWorks 约定的匿名参数符号 "-" 保证正确传递
                                 "scope":        "NodeParameter",
                                 "type":         "NoKvVariableExpression",
-                                "value": f"${{{upstream_assignment_node}.outputs}}"
+                                # 文件路径、AK、SK 依次通过空格分隔传入 sys.argv
+                                "value": f"${{{upstream_assignment_node}.outputs}} ${{workspace.access_id}} ${{workspace.secret_access_key}}"
                             }
                         ],
                     },
