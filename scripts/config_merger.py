@@ -110,6 +110,10 @@ def load_merged_node_config(project_dir: str, env: str = "dev") -> Dict[str, Any
         config["node_name"] = task_global["node_name"]
     if "cron" in task_global:
         config["cron"] = task_global["cron"]
+    if "upstream_node_name" in task_global:
+        config["upstream_node_name"] = task_global["upstream_node_name"]
+    if "downstream_node_name" in task_global:
+        config["downstream_node_name"] = task_global["downstream_node_name"]
     
     # Reader 覆盖
     if "reader_datasource" in task_global and "reader" in config:
