@@ -90,7 +90,6 @@ def main():
     parser.add_argument('--bucket', default="kering-batch-data", help='Bucket 名称')
     parser.add_argument('--prefix', default="camos/user_feature/", help='目录前缀，如 data/user_feature/')
     
-    prefix = PREFIX
     access_id = sys.argv[1]
     secret_key = sys.argv[2]
     
