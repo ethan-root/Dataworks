@@ -287,7 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description='MaxCompute SQL 迁移工具')
     parser.add_argument(
         "--project-dir", type=str, required=True,
-        help="项目目录路径 (如 features/test-feature)"
+        help="项目目录路径 (如 features/user-feature)"
     )
     parser.add_argument(
         "--env", type=str, required=True,

@@ -76,14 +76,14 @@ def _load_base_config(project_dir: str, template_name: str) -> Dict[str, Any]:
     
     # 向上寻找包含 configuration 的目录
     while current.parent != current:
-        if (current / "configuration").exists():
-            cfg_path = current / "configuration" / template_name
+        if (current / "default-setting").exists():
+            cfg_path = current / "default-setting" / template_name
             break
         current = current.parent
         
     if not cfg_path or not cfg_path.exists():
         # 回退到当前工作目录下的 configuration
-        cfg_path = Path.cwd() / "configuration" / template_name
+        cfg_path = Path.cwd() / "default-setting" / template_name
         if not cfg_path.exists():
             raise FileNotFoundError(f"缺少必要的基础模板文件: {cfg_path}")
             

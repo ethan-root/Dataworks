@@ -8,6 +8,8 @@ import logging
 import json
 import oss2
 import argparse
+import sys
+
 
 
 def move_to_completed(access_key_id, access_key_secret, endpoint, bucket_name, file_path):
@@ -63,11 +65,14 @@ def main():
     parser.add_argument('--bucket', default='kering-batch-data', help='Bucket 名称')
     parser.add_argument('--file-path', default='camos/user_feature/user_feature_2026031715.parquet', help='OSS 文件路径，如 camos/user_feature/xxx.parquet')
 
+    access_id = sys.argv[1]
+    secret_key = sys.argv[2]
+    
     args = parser.parse_args()
 
     move_to_completed(
-        args.access_id,
-        args.secret_key,
+        access_id,
+        secret_key,
         args.endpoint,
         args.bucket,
         args.file_path

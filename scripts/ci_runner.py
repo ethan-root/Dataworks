@@ -12,7 +12,7 @@ ci_runner.py — DataWorks 部署编排脚本（CI/CD 流程核心）
   调用它们，确保彼此解耦。
 
 本地调试：
-  python scripts/ci_runner.py --feature-list test-feature --env dev
+  python scripts/ci_runner.py --feature-list user-feature --env dev
 
 使用方式（GitHub Actions 中）：
   python scripts/ci_runner.py \\
@@ -164,7 +164,7 @@ def main() -> None:
     parser.add_argument(
         "--feature-list",
         required=True,
-        help="逗号分隔的 feature 目录名称列表，例如: test-feature,user-feature",
+        help="逗号分隔的 feature 目录名称列表，例如: user-feature,other-feature",
     )
     parser.add_argument(
         "--env",

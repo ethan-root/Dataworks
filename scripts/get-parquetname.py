@@ -10,6 +10,8 @@ import oss2
 import re
 from datetime import datetime
 import argparse
+import sys
+
 
 
 def get_earliest_parquet_file(access_key_id, access_key_secret, endpoint, bucket_name, prefix):
@@ -82,18 +84,22 @@ def main():
     独立运行主函数：解析命令行传递的 OSS 鉴权信息及路径前缀，调用核心提取逻辑。
     """
     parser = argparse.ArgumentParser(description='获取 OSS 目录下最早的 parquet 文件')
-    parser.add_argument('--access-id', default='YOUR_ACCESS_KEY', help='AccessKey ID')
-    parser.add_argument('--secret-key', default='YOUR_SECRET_KEY', help='AccessKey Secret')
+   # parser.add_argument('--access-id', default='YOUR_ACCESS_KEY', help='AccessKey ID')
+   # parser.add_argument('--secret-key', default='YOUR_SECRET_KEY', help='AccessKey Secret')
     parser.add_argument('--endpoint', default="oss-cn-shanghai-internal.aliyuncs.com", help='OSS endpoint,如 oss-cn-shanghai.aliyuncs.com')
     parser.add_argument('--bucket', default="kering-batch-data", help='Bucket 名称')
     parser.add_argument('--prefix', default="camos/user_feature/", help='目录前缀，如 data/user_feature/')
+    
+    prefix = PREFIX
+    access_id = sys.argv[1]
+    secret_key = sys.argv[2]
     
     args = parser.parse_args()
     
     # 获取最早的文件
     earliest_file = get_earliest_parquet_file(
-        args.access_id,
-        args.secret_key,
+        access_id,
+        secret_key,
         args.endpoint,
         args.bucket,
         args.prefix

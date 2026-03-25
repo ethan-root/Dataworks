@@ -94,7 +94,7 @@ Dataworks/
 
 ### 第二步：修改项目的全局“底板”参数
 换了新账号或新项目，必须先修改底层网关参数。
-打开 `configuration/integration-config.json` 文件（这是所有集成节点的模板引擎），修改以下核心字段为**你自己的专属值**：
+打开 `default-setting/integration-config.json` 文件（这是所有集成节点的模板引擎），修改以下核心字段为**你自己的专属值**：
 - `"owner"`: 填你自己的阿里云账号纯数字 UID。
 - `"resource_group"`: 填你实际购买的 DataWorks 独享数据集成资源组标识（Serverless_res_group_xxx）。
 - `"metadata"` 下的 `"owner"` 和 `"project.projectIdentifier"` 等参数也要对应修改为你自己的空间信息。

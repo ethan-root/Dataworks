@@ -8,12 +8,12 @@ create_upstream_node.py
   并将文件路径作为 output 变量传递给下游数据集成节点。
 
 配置来源（合并优先级由低到高）：
-  1. configuration/upstream-node-config.json — 稳定系统参数（commandTypeId / cu / resource_group 等）
-  2. configuration/integration-config.json   — 共享的 owner / resource_group / project metadata
+  1. default-setting/upstream-node-config.json — 稳定系统参数（commandTypeId / cu / resource_group 等）
+  2. default-setting/integration-config.json   — 共享的 owner / resource_group / project metadata
   3. features/<name>/setting-<env>.json      — 环境专属参数（cron / node_name / OSS bucket 等）
 
 本地调试：
-  python scripts/create_upstream_node.py --project-dir features/test-feature --env dev
+  python scripts/create_upstream_node.py --project-dir features/user-feature --env dev
 
 所需环境变量（CI 中由 GitHub Actions secrets 注入）：
   ALIBABA_CLOUD_ACCESS_KEY_ID      — 阿里云 AccessKey ID
@@ -168,10 +168,17 @@ if __name__ == '__main__':
                         "parameters": [
                             {
                                 "artifactType": "Variable",
-                                "name":         "-",
-                                "scope":        "NodeParameter",
-                                "type":         "NoKvVariableExpression",
-                                "value":        f"{ak},{sk}",
+                                "name": "access_id",
+                                "scope": "NodeParameter",
+                                "type": "System",
+                                "value": "{workspace.access_id}"
+                            },
+                            {
+                                "artifactType": "Variable",
+                                "name": "secret_access_key",
+                                "scope": "NodeParameter",
+                                "type": "System",
+                                "value": "{workspace.secret_access_key}"
                             }
                         ],
                     },
@@ -270,7 +277,7 @@ def create_dw_upstream_node(node_config: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="创建或更新 DataWorks 上游赋值节点")
     parser.add_argument("--project-dir", required=True,
-                        help="Feature 项目目录，如 features/test-feature")
+                        help="Feature 项目目录，如 features/user-feature")
     parser.add_argument("--env", required=True,
                         help="部署环境，如 dev / qa / preprod / prod")
     args = parser.parse_args()

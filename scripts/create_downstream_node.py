@@ -12,12 +12,12 @@ create_downstream_node.py
   ↑ 获取文件名               ↑ 同步入库               ↑ 移动已同步文件
 
 配置来源（合并优先级由低到高）：
-  1. configuration/downstream-node-config.json — 稳定系统参数（commandTypeId=1322 / cu / resource_group 等）
-  2. configuration/integration-config.json     — 共享的 owner / resource_group / project metadata
+  1. default-setting/downstream-node-config.json — 稳定系统参数（commandTypeId=1322 / cu / resource_group 等）
+  2. default-setting/integration-config.json     — 共享的 owner / resource_group / project metadata
   3. features/<name>/setting-<env>.json        — 环境专属参数（cron / node_name / OSS bucket 等）
 
 本地调试：
-  python scripts/create_downstream_node.py --project-dir features/test-feature --env dev
+  python scripts/create_downstream_node.py --project-dir features/user-feature --env dev
 
 所需环境变量（CI 中由 GitHub Actions secrets 注入）：
   ALIBABA_CLOUD_ACCESS_KEY_ID      — 阿里云 AccessKey ID
@@ -193,7 +193,7 @@ if __name__ == '__main__':
                                 "name":         "-",   # 使用 DataWorks 约定的匿名参数符号 "-" 保证正确传递
                                 "scope":        "NodeParameter",
                                 "type":         "NoKvVariableExpression",
-                                "value":        file_path_param_value,
+                                "value": f"${{{upstream_assignment_node}.outputs}}"
                             }
                         ],
                     },
@@ -331,7 +331,7 @@ def create_dw_downstream_node(node_config: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="创建或更新 DataWorks 下游 Python 节点（Parquet 文件移动）")
     parser.add_argument("--project-dir", required=True,
-                        help="Feature 项目目录，如 features/test-feature")
+                        help="Feature 项目目录，如 features/user-feature")
     parser.add_argument("--env", required=True,
                         help="部署环境，如 dev / qa / preprod / prod")
     args = parser.parse_args()
