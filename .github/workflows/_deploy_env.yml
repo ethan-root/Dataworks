@@ -21,28 +21,36 @@ on:
         required: true
         type: string
     secrets:
+      # 保留原有secrets以兼容现有调用，但后续应从Vault获取
       ALIYUN_ACCESS_KEY_ID:
-        required: true
+        required: false
       ALIYUN_ACCESS_KEY_SECRET:
-        required: true
+        required: false
 
 jobs:
   deploy:
     name: "Deploy → ${{ inputs.env_name }}"
-    runs-on: ubuntu-latest
+    runs-on:
+      - kt-gu-cn
     environment: ${{ inputs.env_name }}
+    permissions:
+      id-token: write  # 为Vault Action提供JWT令牌权限
+      contents: read   # 读取仓库内容的权限
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       PYTHONUNBUFFERED: "1"
-      # ── DataWorks / 阿里云凭证（由主流水线传入）──────────────────
-      ALIBABA_CLOUD_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+      # ── DataWorks / 阿里云凭证将在后续步骤中从Vault设置──────────────────
 
     steps:
-      # ── 准备：检出代码、安装 Python 依赖 ──────────────────────────
+      # ── 准备：检出代码、从Vault获取AK/SK ──────────────────────────
       - name: "⬇️  Checkout repository"
         uses: actions/checkout@v4
+
+       - name: "🔐 Set AK/SK from GitHub Secrets"
+         run: |
+           echo "DATAWORKS_ACCESS_KEY=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+           echo "DATAWORKS_ACCESS_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
 
       - name: "🐍 Setup Python 3.11"
         uses: actions/setup-python@v5
@@ -52,7 +60,7 @@ jobs:
       - name: "📦 Install dependencies"
         run: pip install -r scripts/requirements.txt
 
-      - name: "📋 Load env config from JSON files"
+      - name: "📋 Load env config from JSON files and set AK/SK"
         shell: bash
         run: |
           REGION=$(jq -r '.region' default-setting/integration-config.json)
@@ -63,6 +71,9 @@ jobs:
           echo "DATAWORKS_PROJECT_ID=${DW_PROJECT_ID}" >> $GITHUB_ENV
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"    >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}"  >> $GITHUB_ENV
+          # 设置从Vault获取的AK/SK
+          echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${DATAWORKS_ACCESS_KEY}" >> $GITHUB_ENV
+          echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${DATAWORKS_ACCESS_SECRET}" >> $GITHUB_ENV
 
       # ── 核心：调用 Python 编排脚本执行部署 ──────────────────────────
       # 所有业务逻辑（check / create / update / publish）均在

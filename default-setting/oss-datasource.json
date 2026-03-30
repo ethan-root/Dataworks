@@ -1,6 +1,6 @@
 {
     "name": "oss_demo",
-    "endpoint": "https://oss-cn-hangzhou-internal.aliyuncs.com",
-    "bucket": "cus-camos-dataworks-nonprod",
+    "endpoint": "https://oss-cn-shanghai-internal.aliyuncs.com",
+    "bucket": "kering-batch-data",
     "description": "OSS datasource auto-created via script"
 }

@@ -1,8 +1,8 @@
 {
     "node_name": "update_task_1",
-    "owner": "210690073655631050",
-    "resource_group": "Serverless_res_group_666685338003137_771961687655072",
-    "resourceGroupId": "771961687655072",
+    "owner": "202997971985675034",
+    "resource_group": "Serverless_res_group_771480527024737_771948044034785",
+    "resourceGroupId": "771948044034785",
     "resourceGroupName": "dataworks_default_resource_group",
     "cu": 0.5,
     "script_cu": "0.25",
@@ -12,13 +12,13 @@
     "instanceMode": "Immediately",
     "reader": {
         "datasource": "oss_demo",
-        "path": "parquet/*.parquet",
+        "path": "camos/*.parquet",
         "fileFormat": "parquet",
         "envType": 1
     },
     "writer": {
         "datasource": "mc_test_2",
-        "table": "feature_test_2",
+        "table": "user_feature",
         "partition": "pt='${bizdate}'",
         "envType": 1,
         "isSupportThreeModel": false,
@@ -43,15 +43,15 @@
     ],
     "metadata": {
         "createTime": "2026-02-13 18:08:48",
-        "owner": "210690073655631050",
-        "ownerName": "210690073655631050",
+        "owner": "202997971985675034",
+        "ownerName": "202997971985675034",
         "project": {
-            "projectIdentifier": "camos_dev",
-            "projectName": "camos_dev",
-            "projectId": "559608"
+            "projectIdentifier": "parquet_test",
+            "projectName": "parquet_test",
+            "projectId": "1186017"
         },
-        "projectId": "1184689",
-        "tenantId": "666685338003137"
+        "projectId": "1186017",
+        "tenantId": "771480527024737"
     },
-    "region": "cn-hangzhou"
+    "region": "cn-shanghai"
 }
