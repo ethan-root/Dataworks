@@ -6,24 +6,42 @@ on:
       - main
       - dev
 
+env:
+  ARTIFACTORY_DOCKER_REGISTRY: ${{ vars.ARTIFACTORY_DOCKER_REGISTRY }}
+  ARTIFACTORY_DOCKER_REPO: ${{ vars.ARTIFACTORY_DOCKER_REPO }}
+  HELM_REPO: ${{ vars.HELM_REPO }}
+  VAULT_ADDRESS_PROD: ${{ vars.VAULT_ADDRESS_PROD }}
+  VAULT_GITHUB_ROLE: ${{ vars.VAULT_GITHUB_ROLE }}
+  VAULT_GITHUB_PATH: ${{ vars.VAULT_GITHUB_PATH }}
+  vars: ${{ toJSON(vars) }}
+  language: python
+
 jobs:
   code_scan:
-    name: Code Scan (安全扫描)
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      pull-requests: read
+      contents: read
+      id-token: write
+    runs-on:
+      - kt-gu-cn
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Sonar && GitGuardian 占位符
-        run: |
-          echo "🚀 正在触发代码质量与安全扫描 (SonarQube & GitGuardian)..."
-          echo "✅ 扫描通过。"
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: kering-technologies-china/dso-cus-github-action/microservice/setup-env@main
+      name: Setup Environment
+    - name: Sonar Scan
+      uses: kering-technologies-china/dso-cus-github-action/microservice/python-sonar-scan@main
+      with:
+        python-version: "3.11"
+        requirements-path: "requirements.txt"
+        test: "false"
+        strict: "true"
 
   sql_mutability_check:
     name: DDL Mutability Check (历史 DDL 防篡改校验)
-    runs-on: ubuntu-latest
+    runs-on:
+      - kt-gu-cn
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
