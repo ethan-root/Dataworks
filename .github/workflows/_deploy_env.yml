@@ -42,15 +42,15 @@ jobs:
       PYTHONUNBUFFERED: "1"
       # ── DataWorks / 阿里云凭证将在后续步骤中从Vault设置──────────────────
 
-     steps:
-       # ── 准备：检出代码、从Vault获取AK/SK ──────────────────────────
-       - name: "⬇️  Checkout repository"
-         uses: actions/checkout@v4
+    steps:
+      # ── 准备：检出代码、从Vault获取AK/SK ──────────────────────────
+      - name: "⬇️  Checkout repository"
+        uses: actions/checkout@v4
 
-       - name: "🔐 Set AK/SK from GitHub Secrets"
-         run: |
-           echo "DATAWORKS_ACCESS_KEY=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-           echo "DATAWORKS_ACCESS_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
+      - name: "🔐 Set AK/SK from GitHub Secrets"
+        run: |
+          echo "DATAWORKS_ACCESS_KEY=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+          echo "DATAWORKS_ACCESS_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
 
       - name: "🐍 Setup Python 3.11"
         uses: actions/setup-python@v5
