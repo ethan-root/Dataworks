@@ -1,0 +1,124 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# _deploy_ddl_env.yml  ·  DDL 变更管理 单环境部署可复用工作流
+#
+# 职责：接受 env_name 和 feature_list 两个输入参数，针对每个 feature
+#       依次执行 DDL 执行检查脚本（check_sql_executed.py）。
+#
+# 调用方：database_update.yml
+# 业务逻辑：scripts/check_sql_executed.py
+# ─────────────────────────────────────────────────────────────────────────────
+name: "[Internal] Deploy DDL to Environment"
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        description: "目标环境名称 (dev / qa / preprod / prod)"
+        required: true
+        type: string
+      feature_list:
+        description: "换行符分隔的 feature 列表，例如: user-feature\nguest-feature"
+        required: true
+        type: string
+      force:
+        description: "是否强制重新执行所有 SQL（忽略 Hash 幂等检查）"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy-ddl:
+    name: "Deploy DDL → ${{ inputs.env_name }}"
+    runs-on:
+      - kt-gu-cn
+    environment: ${{ inputs.env_name }}
+    permissions:
+      id-token: write  # 为 Vault Action 提供 JWT 令牌权限
+      contents: read   # 读取仓库内容的权限
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      # ── 准备：检出代码 ────────────────────────────────────────────────────
+      - name: "⬇️  Checkout repository"
+        uses: actions/checkout@v4
+
+      # ── 凭证：从 Vault 获取 AK/SK ────────────────────────────────────────
+      - name: "🔐 Fetch AK/SK from Vault"
+        uses: hashicorp/vault-action@v2
+        with:
+          url: "https://vault.arsenal.mgmt4apps.io"
+          role: "tactiq-cus-ghes-cn"
+          path: "github-cn"
+          method: jwt
+          secrets: |
+            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_KEY;
+            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_SECRET;
+
+      # ── 环境：安装 Python 和依赖 ─────────────────────────────────────────
+      - name: "🐍 Setup Python 3.11"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "📦 Install dependencies"
+        run: pip install -r scripts/requirements.txt
+
+      # ── 凭证：将 Vault AK/SK 映射到脚本期望的环境变量名 ──────────────────────
+      - name: "🔑 Map Vault credentials to script environment variables"
+        shell: bash
+        run: |
+          # MC project/endpoint 由 check_sql_executed.py 自身从配置文件读取（两层合并）：
+          #   第一层：default-setting/maxcompute-datasource.json（基础默认值）
+          #   第二层：features/<feature>/setting-<env>.json（环境特定值，覆盖默认）
+          # 此处仅注入 AK/SK（敏感凭据不打印、不输出到日志）
+          echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${DATAWORKS_ACCESS_KEY}"        >> $GITHUB_ENV
+          echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${DATAWORKS_ACCESS_SECRET}" >> $GITHUB_ENV
+
+      # ── 核心：动态遍历 feature 列表并执行 DDL ────────────────────────────
+      - name: "🚀 Execute DDL migrations for [${{ inputs.env_name }}]"
+        shell: bash
+        run: |
+          FORCE_FLAG=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+            echo "⚠️  强制模式已开启，将忽略 Hash 幂等检查重新执行所有 SQL"
+          fi
+
+          # 将换行符分隔的 feature 列表转为数组
+          FEATURES="${{ inputs.feature_list }}"
+          FEATURE_ARRAY=()
+          while IFS= read -r line; do
+            trimmed=$(echo "$line" | xargs)   # 去除首尾空格
+            [ -n "$trimmed" ] && FEATURE_ARRAY+=("$trimmed")
+          done <<< "$FEATURES"
+
+          echo "📋 本次部署 ${#FEATURE_ARRAY[@]} 个 feature:"
+          for f in "${FEATURE_ARRAY[@]}"; do
+            echo "   - features/$f"
+          done
+
+          # 逐 feature 执行
+          FAILED=0
+          for FEATURE in "${FEATURE_ARRAY[@]}"; do
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "▶  开始处理: features/${FEATURE} [env: ${{ inputs.env_name }}]"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            python scripts/check_sql_executed.py \
+              --project-dir "features/${FEATURE}" \
+              --env "${{ inputs.env_name }}" \
+              $FORCE_FLAG || { FAILED=1; break; }
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "❌ DDL 执行过程中发生错误，已中止后续 feature 的部署。"
+            exit 1
+          fi
+
+          echo ""
+          echo "🎉 [${{ inputs.env_name }}] 全部 feature DDL 执行完成！"
