@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # datawork_node_create_update.yml  ·  DataWorks Node 创建/更新 主流水线
 #
-# 触发条件：main 分支有 features/** 目录下的文件变动时自动触发
+# 触发条件：dev 分支有 features/** 目录下的文件变动时自动触发
 #
 # 执行流程：
 #   1. detect    — 扫描 git diff，识别本次推送涉及哪些环境的配置发生变动
@@ -19,7 +19,7 @@ env:
 on:
   push:
     branches:
-      - main
+      - dev                  # 推送至dev分支时触发
     paths:
       - "features/**"         # 仅当 features/ 目录内容发生变化时触发
       - "!features/shared/**" # 忽略 shared 共用目录的变动
@@ -48,7 +48,8 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   detect:
     name: "🔍 Detect Changed Features Per Env"
-    runs-on: ubuntu-latest
+    runs-on:
+      - kt-gu-cn
     outputs:
       feature_list_dev: ${{ steps.resolve.outputs.feature_list_dev }}
       feature_list_qa: ${{ steps.resolve.outputs.feature_list_qa }}
@@ -161,9 +162,6 @@ jobs:
     with:
       env_name: "dev"
       feature_list: ${{ needs.detect.outputs.feature_list_dev }}
-    secrets:
-      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
   # Job 2 · 部署到 QA 环境（独立并行执行）
@@ -176,9 +174,6 @@ jobs:
     with:
       env_name: "qa"
       feature_list: ${{ needs.detect.outputs.feature_list_qa }}
-    secrets:
-      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
   # Job 3 · 部署到 PRE-PROD 环境（独立并行执行）
@@ -191,9 +186,6 @@ jobs:
     with:
       env_name: "preprod"
       feature_list: ${{ needs.detect.outputs.feature_list_preprod }}
-    secrets:
-      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
   # ─────────────────────────────────────────────────────────────────────────
   # Job 4 · 部署到 PROD 环境（独立触发）
@@ -207,6 +199,3 @@ jobs:
     with:
       env_name: "prod"
       feature_list: ${{ needs.detect.outputs.feature_list_prod }}
-    secrets:
-      ALIYUN_ACCESS_KEY_ID:     ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-      ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}

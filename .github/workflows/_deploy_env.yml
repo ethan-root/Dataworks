@@ -47,10 +47,16 @@ jobs:
       - name: "⬇️  Checkout repository"
         uses: actions/checkout@v4
 
-      - name: "🔐 Set AK/SK from GitHub Secrets"
-        run: |
-          echo "DATAWORKS_ACCESS_KEY=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-          echo "DATAWORKS_ACCESS_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
+      - name: "🔐 Fetch AK/SK from Vault"
+        uses: hashicorp/vault-action@v2
+        with:
+          url: "https://vault.arsenal.mgmt4apps.io"
+          role: "tactiq-cus-ghes-cn"
+          path: "github-cn"
+          method: jwt
+          secrets: |
+            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_KEY;
+            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_SECRET;
 
       - name: "🐍 Setup Python 3.11"
         uses: actions/setup-python@v5
