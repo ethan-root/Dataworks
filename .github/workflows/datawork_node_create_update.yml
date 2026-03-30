@@ -12,6 +12,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 name: datawork_node_create_update
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 

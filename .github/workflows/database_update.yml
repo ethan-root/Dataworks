@@ -17,6 +17,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 name: "Database DDL Update"
 
+permissions:
+  contents: read
+  id-token: write
+
 on:
   # ⚠️  临时过渡触发器：仅用于 dev 分支测试阶段，当 workflow 文件本身被推送时自动触发。
   # TODO: 等 database_update.yml 合并到 main 分支后，删除以下 push 块，仅保留 workflow_dispatch。
