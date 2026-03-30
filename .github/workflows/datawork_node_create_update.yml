@@ -14,7 +14,6 @@ name: datawork_node_create_update
 
 permissions:
   contents: read
-  id-token: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -52,8 +51,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────
   detect:
     name: "🔍 Detect Changed Features Per Env"
-    runs-on:
-      - kt-gu-cn
+    runs-on: ubuntu-latest
     outputs:
       feature_list_dev: ${{ steps.resolve.outputs.feature_list_dev }}
       feature_list_qa: ${{ steps.resolve.outputs.feature_list_qa }}

@@ -31,7 +31,7 @@ jobs:
   deploy:
     name: "Deploy → ${{ inputs.env_name }}"
     runs-on:
-      - kt-gu-cn
+      - ubuntu-latest
     environment: ${{ inputs.env_name }}
     permissions:
       id-token: write  # 为Vault Action提供JWT令牌权限
@@ -40,24 +40,17 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       PYTHONUNBUFFERED: "1"
-      # ── DataWorks / 阿里云凭证将在后续步骤中从Vault设置──────────────────
+      # ── DataWorks / 阿里云凭证将从 GitHub Secrets 读取──────────────────
 
     steps:
-      # ── 准备：检出代码、从Vault获取AK/SK ──────────────────────────
+      # ── 准备：检出代码、读取 GitHub Secrets AK/SK ──────────────────────────
       - name: "⬇️  Checkout repository"
         uses: actions/checkout@v4
 
-      - name: "🔐 Fetch AK/SK from Vault"
-        uses: hashicorp/vault-action@v2
-        with:
-          url: "https://vault.arsenal.mgmt4apps.io"
-          role: "tactiq-cus-ghes-cn"
-          path: "github-cn"
-          method: jwt
-          secrets: |
-            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_KEY;
-            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_SECRET;
-
+      - name: "🔐 Set AK/SK from GitHub Secrets"
+        run: |
+          echo "DATAWORKS_ACCESS_KEY=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+          echo "DATAWORKS_ACCESS_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
       - name: "🐍 Setup Python 3.11"
         uses: actions/setup-python@v5
         with:
@@ -77,7 +70,7 @@ jobs:
           echo "DATAWORKS_PROJECT_ID=${DW_PROJECT_ID}" >> $GITHUB_ENV
           echo "MAXCOMPUTE_PROJECT=${MC_PROJECT}"    >> $GITHUB_ENV
           echo "MAXCOMPUTE_ENDPOINT=${MC_ENDPOINT}"  >> $GITHUB_ENV
-          # 设置从Vault获取的AK/SK
+          # 设置AK/SK
           echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${DATAWORKS_ACCESS_KEY}" >> $GITHUB_ENV
           echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${DATAWORKS_ACCESS_SECRET}" >> $GITHUB_ENV
 

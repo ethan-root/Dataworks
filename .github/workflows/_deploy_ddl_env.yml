@@ -30,7 +30,7 @@ jobs:
   deploy-ddl:
     name: "Deploy DDL → ${{ inputs.env_name }}"
     runs-on:
-      - kt-gu-cn
+      - ubuntu-latest
     environment: ${{ inputs.env_name }}
     permissions:
       id-token: write  # 为 Vault Action 提供 JWT 令牌权限
@@ -45,17 +45,12 @@ jobs:
       - name: "⬇️  Checkout repository"
         uses: actions/checkout@v4
 
-      # ── 凭证：从 Vault 获取 AK/SK ────────────────────────────────────────
-      - name: "🔐 Fetch AK/SK from Vault"
-        uses: hashicorp/vault-action@v2
-        with:
-          url: "https://vault.arsenal.mgmt4apps.io"
-          role: "tactiq-cus-ghes-cn"
-          path: "github-cn"
-          method: jwt
-          secrets: |
-            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_KEY;
-            cus/data/ghes-cn/alicloud/secrets/nonprod DATAWORKS_ACCESS_SECRET;
+      # ── 凭证：从 GitHub Secrets 获取 AK/SK ────────────────────────────────────────
+      - name: "🔐 Set AK/SK from GitHub Secrets"
+        shell: bash
+        run: |
+          echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ secrets.ALIYUN_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+          echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}" >> $GITHUB_ENV
 
       # ── 环境：安装 Python 和依赖 ─────────────────────────────────────────
       - name: "🐍 Setup Python 3.11"
@@ -65,17 +60,6 @@ jobs:
 
       - name: "📦 Install dependencies"
         run: pip install -r scripts/requirements.txt
-
-      # ── 凭证：将 Vault AK/SK 映射到脚本期望的环境变量名 ──────────────────────
-      - name: "🔑 Map Vault credentials to script environment variables"
-        shell: bash
-        run: |
-          # MC project/endpoint 由 check_sql_executed.py 自身从配置文件读取（两层合并）：
-          #   第一层：default-setting/maxcompute-datasource.json（基础默认值）
-          #   第二层：features/<feature>/setting-<env>.json（环境特定值，覆盖默认）
-          # 此处仅注入 AK/SK（敏感凭据不打印、不输出到日志）
-          echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${DATAWORKS_ACCESS_KEY}"        >> $GITHUB_ENV
-          echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${DATAWORKS_ACCESS_SECRET}" >> $GITHUB_ENV
 
       # ── 核心：动态遍历 feature 列表并执行 DDL ────────────────────────────
       - name: "🚀 Execute DDL migrations for [${{ inputs.env_name }}]"

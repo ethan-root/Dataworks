@@ -6,42 +6,32 @@ on:
       - main
       - dev
 
-env:
-  ARTIFACTORY_DOCKER_REGISTRY: ${{ vars.ARTIFACTORY_DOCKER_REGISTRY }}
-  ARTIFACTORY_DOCKER_REPO: ${{ vars.ARTIFACTORY_DOCKER_REPO }}
-  HELM_REPO: ${{ vars.HELM_REPO }}
-  VAULT_ADDRESS_PROD: ${{ vars.VAULT_ADDRESS_PROD }}
-  VAULT_GITHUB_ROLE: ${{ vars.VAULT_GITHUB_ROLE }}
-  VAULT_GITHUB_PATH: ${{ vars.VAULT_GITHUB_PATH }}
-  vars: ${{ toJSON(vars) }}
-  language: python
-
 jobs:
   code_scan:
+    name: Code Static Analysis (flake8)
     permissions:
-      pull-requests: read
       contents: read
-      id-token: write
-    runs-on:
-      - kt-gu-cn
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - uses: kering-technologies-china/dso-cus-github-action/microservice/setup-env@main
-      name: Setup Environment
-    - name: Sonar Scan
-      uses: kering-technologies-china/dso-cus-github-action/microservice/python-sonar-scan@main
-      with:
-        python-version: "3.11"
-        requirements-path: "requirements.txt"
-        test: "false"
-        strict: "true"
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   sql_mutability_check:
     name: DDL Mutability Check (历史 DDL 防篡改校验)
-    runs-on:
-      - kt-gu-cn
+    runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:

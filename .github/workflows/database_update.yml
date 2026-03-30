@@ -19,7 +19,6 @@ name: "Database DDL Update"
 
 permissions:
   contents: read
-  id-token: write
 
 on:
   # ⚠️  临时过渡触发器：仅用于 dev 分支测试阶段，当 workflow 文件本身被推送时自动触发。
@@ -65,8 +64,7 @@ jobs:
   # 在此 Job 中通过扫描 features/ 目录実现运行时动态发现与校验。
   prepare:
     name: "🔍 Resolve feature list"
-    runs-on:
-      - kt-gu-cn
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
